@@ -1,38 +1,14 @@
-import { Stack, router } from 'expo-router';
+import { Redirect, Stack } from 'expo-router';
 import { useAuth } from '../hooks/useAuth';
 import { View, ActivityIndicator, Text } from 'react-native';
-import { useEffect, useState } from 'react';
 import { BookingsProvider } from '../hooks/useBookings';
 import { HabitTrackerProvider } from '../hooks/useHabitTracker';
 
 export default function RootLayout() {
   const { session, loading } = useAuth();
-  const [hasNavigated, setHasNavigated] = useState(false);
 
-  // Navigate based on auth state
-  useEffect(() => {
-    if (!loading && !hasNavigated) {
-      console.log('🔄 RootLayout navigation - Session:', session ? 'Present' : 'None');
-      
-      if (!session) {
-        console.log('➡️ Navigating to welcome screen');
-        router.replace('/(auth)/welcome');
-      } else {
-        console.log('➡️ Navigating to tabs');
-        router.replace('/(tabs)');
-      }
-      
-      setHasNavigated(true);
-    }
-  }, [session, loading, hasNavigated]);
-
-  // Reset navigation flag when auth state changes
-  useEffect(() => {
-    setHasNavigated(false);
-  }, [session]);
-
-  // Show loading screen while auth is initializing
   if (loading) {
+    console.log('⏳ Root loading...');
     return (
       <View style={{ flex: 1, justifyContent:'center', alignItems:'center', backgroundColor: '#000' }}>
         <Text style={{ color: '#fff', marginBottom: 16, fontSize: 40 }}>🔥</Text>
@@ -42,13 +18,18 @@ export default function RootLayout() {
     );
   }
 
+  if (!session) {
+    console.log('➡️ No session. Redirecting to auth welcome');
+    return <Redirect href="/(auth)/welcome" />;
+  }
+
   return (
     <BookingsProvider>
       <HabitTrackerProvider>
         <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(auth)" />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         </Stack>
+        <Redirect href="/(tabs)" />
       </HabitTrackerProvider>
     </BookingsProvider>
   );

@@ -5,6 +5,8 @@ import { BookingsProvider } from '../hooks/useBookings';
 import { HabitTrackerProvider } from '../hooks/useHabitTracker';
 import { NotificationProvider } from '../hooks/useNotifications';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 const queryClient = new QueryClient();
 
@@ -14,7 +16,7 @@ export default function RootLayout() {
   if (loading) {
     console.log('⏳ Root loading screen render');
     return (
-      <View style={{ flex: 1, justifyContent:'center', alignItems:'center', backgroundColor: '#000' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#000' }}>
         <Text style={{ color: '#fff', marginBottom: 16, fontSize: 40 }}>⚡️</Text>
         <ActivityIndicator color="#ff6b35" size="large" />
         <Text style={{ color: '#999', marginTop: 16 }}>Loading...</Text>
@@ -24,22 +26,26 @@ export default function RootLayout() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <NotificationProvider>
-        <BookingsProvider>
-          <HabitTrackerProvider>
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="auth/callback" options={{ headerShown: false, presentation: 'modal' }} />
-            </Stack>
-            {!session ? (
-              <Redirect href="/(auth)/welcome" />
-            ) : (
-              <Redirect href="/(tabs)" />
-            )}
-          </HabitTrackerProvider>
-        </BookingsProvider>
-      </NotificationProvider>
+      <SafeAreaProvider>
+        <ErrorBoundary>
+          <NotificationProvider>
+            <BookingsProvider>
+              <HabitTrackerProvider>
+                <Stack screenOptions={{ headerShown: false }}>
+                  <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+                  <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                  <Stack.Screen name="auth/callback" options={{ headerShown: false, presentation: 'modal' }} />
+                </Stack>
+                {!session ? (
+                  <Redirect href="/(auth)/welcome" />
+                ) : (
+                  <Redirect href="/(tabs)" />
+                )}
+              </HabitTrackerProvider>
+            </BookingsProvider>
+          </NotificationProvider>
+        </ErrorBoundary>
+      </SafeAreaProvider>
     </QueryClientProvider>
   );
 }

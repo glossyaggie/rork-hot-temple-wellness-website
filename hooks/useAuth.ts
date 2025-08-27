@@ -19,14 +19,24 @@ export function useAuth() {
   useEffect(() => {
     let mounted = true;
 
+    const withTimeout = async <T,>(p: Promise<T>, ms: number, label: string): Promise<T> => {
+      return new Promise<T>((resolve, reject) => {
+        const t = setTimeout(() => {
+          console.warn(`⏱️ ${label} timed out after ${ms}ms`);
+          reject(new Error(`${label} timeout`));
+        }, ms);
+        p.then((v) => { clearTimeout(t); resolve(v); }).catch((e) => { clearTimeout(t); reject(e); });
+      });
+    };
+
     const bootstrap = async () => {
       try {
         console.log('🔄 Starting auth bootstrap...');
-        const { data: { session }, error } = await supabase.auth.getSession();
+        const { data: { session }, error } = await withTimeout(supabase.auth.getSession(), 10000, 'getSession');
 
         if (error) {
           console.error('❌ Auth session error:', error);
-          setLoading(false);
+          if (mounted) setLoading(false);
           return;
         }
 
@@ -36,7 +46,12 @@ export function useAuth() {
         setSession(session);
 
         if (session) {
-          await loadRole(session.user.id);
+          try {
+            await withTimeout(loadRole(session.user.id), 8000, 'loadRole');
+          } catch (e) {
+            console.warn('⚠️ loadRole failed, defaulting to member');
+            setRole('member');
+          }
         } else {
           setRole(null);
         }
@@ -45,7 +60,7 @@ export function useAuth() {
         console.log('✅ Auth bootstrap complete');
       } catch (err) {
         console.error('❌ Auth bootstrap error:', err);
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     };
 
@@ -56,7 +71,11 @@ export function useAuth() {
       setSession(s ?? null);
 
       if (s?.user) {
-        await loadRole(s.user.id);
+        try {
+          await loadRole(s.user.id);
+        } catch (e) {
+          console.warn('⚠️ loadRole on state change failed');
+        }
       } else {
         setRole(null);
       }
@@ -64,7 +83,9 @@ export function useAuth() {
 
     return () => {
       mounted = false;
-      sub.subscription.unsubscribe();
+      try {
+        sub.subscription.unsubscribe();
+      } catch {}
     };
   }, []);
 

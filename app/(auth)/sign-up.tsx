@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react';
 import { View, TextInput, StyleSheet, Text, Alert, SafeAreaView, TouchableOpacity, ScrollView, Linking, Platform } from 'react-native';
+import * as LinkingExpo from 'expo-linking';
 import { supabase } from '../../lib/supabase';
 import { router } from 'expo-router';
 
@@ -25,10 +26,13 @@ export default function SignUp() {
       setBusy(true);
       console.log('📝 SignUp start', { email });
 
+      const emailRedirectTo = LinkingExpo.createURL('/auth/callback');
+      console.log('↪️ Using emailRedirectTo', emailRedirectTo);
+
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { full_name: fullName } },
+        options: { data: { full_name: fullName }, emailRedirectTo },
       });
       if (error) throw error;
 

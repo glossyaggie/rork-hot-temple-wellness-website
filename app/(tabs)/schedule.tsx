@@ -1,578 +1,198 @@
-import React, { useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-  FlatList,
-} from 'react-native';
-import { Clock, Users, Flame, ChevronDown } from 'lucide-react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TextInput } from 'react-native';
+import { Clock, Users, Pencil, Plus, Trash2 } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
-import { useBookings } from '@/hooks/useBookings';
-import AuthModal from '@/components/AuthModal';
-import PassPurchaseModal from '@/components/PassPurchaseModal';
-import NotificationBanner from '@/components/NotificationBanner';
+import { useSchedule } from '@/hooks/useSchedule';
 
-const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const FULL_DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+function fmtTime(iso: string): string {
+  const d = new Date(iso);
+  const h = d.getHours();
+  const m = d.getMinutes();
+  const hours12 = ((h + 11) % 12) + 1;
+  const mm = m.toString().padStart(2, '0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  return `${hours12}:${mm} ${ampm}`;
+}
+
+function durationMin(startIso: string, endIso: string): number {
+  const s = new Date(startIso).getTime();
+  const e = new Date(endIso).getTime();
+  const diff = Math.max(0, e - s);
+  return Math.round(diff / 60000);
+}
 
 export default function ScheduleScreen() {
-  const [showAuthModal, setShowAuthModal] = useState(false);
-  const [showPassModal, setShowPassModal] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedFilters, setSelectedFilters] = useState({
-    classes: 'All',
-    instructors: 'All'
-  });
-  const [showClassFilter, setShowClassFilter] = useState(false);
-  const [showInstructorFilter, setShowInstructorFilter] = useState(false);
-  const [notification, setNotification] = useState<{
-    message: string;
-    type: 'success' | 'error' | 'info';
-    visible: boolean;
-  }>({ message: '', type: 'info', visible: false });
+  const { role } = useAuth();
+  const isAdmin = role === 'admin';
+  const { items, isLoading, isError, refetch, add, update, remove, creating, updating, deleting } = useSchedule();
+  const [modalOpenId, setModalOpenId] = useState<number | null>(null);
+  const [draft, setDraft] = useState<{ title: string; instructor: string; start_time: string; end_time: string; capacity: string }>({ title: '', instructor: '', start_time: '', end_time: '', capacity: '' });
 
-  const { user } = useAuth();
-  const { classes, bookClass } = useBookings();
+  const sorted = useMemo(() => items.slice().sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()), [items]);
 
-  const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
-    setNotification({ message, type, visible: true });
+  const openCreate = () => {
+    setModalOpenId(0);
+    setDraft({ title: '', instructor: '', start_time: new Date().toISOString(), end_time: new Date(Date.now() + 3600000).toISOString(), capacity: '' });
   };
 
-  const hideNotification = () => {
-    setNotification(prev => ({ ...prev, visible: false }));
+  const openEdit = (id: number) => {
+    const row = items.find(r => r.id === id);
+    if (!row) return;
+    setModalOpenId(id);
+    setDraft({ title: row.title ?? '', instructor: row.instructor ?? '', start_time: row.start_time, end_time: row.end_time, capacity: (row.capacity ?? '').toString() });
   };
 
-  const handleBookClass = async (classSlot: any) => {
-    if (!user) {
-      setShowAuthModal(true);
-      return;
-    }
+  const closeModal = () => {
+    setModalOpenId(null);
+  };
 
-    const result = await bookClass(classSlot);
-    
-    if (result.success) {
-      showNotification(result.message, 'success');
-    } else {
-      if (result.message.includes('credits')) {
-        showNotification(result.message, 'error');
-        setTimeout(() => setShowPassModal(true), 1000);
+  const submit = async () => {
+    try {
+      const payload = { title: draft.title, instructor: draft.instructor, start_time: draft.start_time, end_time: draft.end_time, capacity: draft.capacity ? Number(draft.capacity) : null };
+      if (modalOpenId && modalOpenId !== 0) {
+        await update({ id: modalOpenId, patch: payload });
       } else {
-        showNotification(result.message, 'error');
+        await add(payload);
       }
+      closeModal();
+    } catch (e) {
+      Alert.alert('Error', 'Could not save schedule');
     }
   };
 
-  const generateWeekDates = () => {
-    const dates = [];
-    const today = new Date();
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Start from Monday
-    
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(startOfWeek);
-      date.setDate(startOfWeek.getDate() + i);
-      dates.push(date);
-    }
-    return dates;
+  const confirmDelete = (id: number) => {
+    Alert.alert('Delete class', 'Are you sure you want to delete this class?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => { try { await remove(id); } catch { Alert.alert('Error', 'Delete failed'); } } }
+    ]);
   };
-
-  const weekDates = generateWeekDates();
-
-  const getClassesForSelectedDate = () => {
-    const dayName = FULL_DAYS[selectedDate.getDay() === 0 ? 6 : selectedDate.getDay() - 1];
-    let filteredClasses = classes.filter(c => c.day === dayName);
-    
-    // Apply class type filter
-    if (selectedFilters.classes !== 'All') {
-      filteredClasses = filteredClasses.filter(c => c.type === selectedFilters.classes);
-    }
-    
-    // Apply instructor filter
-    if (selectedFilters.instructors !== 'All') {
-      filteredClasses = filteredClasses.filter(c => c.instructor === selectedFilters.instructors);
-    }
-    
-    return filteredClasses.sort((a, b) => {
-      const timeA = new Date(`1970/01/01 ${a.time}`).getTime();
-      const timeB = new Date(`1970/01/01 ${b.time}`).getTime();
-      return timeA - timeB;
-    });
-  };
-  
-  const getUniqueClassTypes = () => {
-    const types = [...new Set(classes.map(c => c.type))];
-    return ['All', ...types];
-  };
-  
-  const getUniqueInstructors = () => {
-    const instructors = [...new Set(classes.map(c => c.instructor))];
-    return ['All', ...instructors];
-  };
-
-  const formatDateForDisplay = (date: Date) => {
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'long', 
-      month: 'long', 
-      day: 'numeric' 
-    });
-  };
-
-  const isToday = (date: Date) => {
-    const today = new Date();
-    return date.toDateString() === today.toDateString();
-  };
-
-  const renderDateItem = ({ item: date }: { item: Date }) => {
-    const isSelected = date.toDateString() === selectedDate.toDateString();
-    const todayDate = isToday(date);
-    
-    return (
-      <TouchableOpacity
-        style={[
-          styles.dateItem,
-          isSelected && styles.selectedDateItem,
-          todayDate && !isSelected && styles.todayDateItem
-        ]}
-        onPress={() => setSelectedDate(date)}
-      >
-        <Text style={[
-          styles.dayText,
-          isSelected && styles.selectedDayText,
-          todayDate && !isSelected && styles.todayDayText
-        ]}>
-          {DAYS[date.getDay() === 0 ? 6 : date.getDay() - 1]}
-        </Text>
-        <Text style={[
-          styles.dateText,
-          isSelected && styles.selectedDateText,
-          todayDate && !isSelected && styles.todayDateText
-        ]}>
-          {date.getDate()}
-        </Text>
-      </TouchableOpacity>
-    );
-  };
-
-  const renderClassSlot = (classSlot: any) => {
-    const isAlmostFull = classSlot.bookings >= classSlot.maxCapacity * 0.8;
-    const isFull = classSlot.bookings >= classSlot.maxCapacity;
-    const isBooked = user && classSlot.bookedBy?.includes(user.id);
-
-    return (
-      <TouchableOpacity
-        key={classSlot.id}
-        style={[
-          styles.classSlot,
-          isFull && styles.fullClassSlot,
-          isBooked && styles.bookedClassSlot,
-        ]}
-        onPress={() => handleBookClass(classSlot)}
-        disabled={isFull && !isBooked}
-      >
-        <View style={styles.classRow}>
-          <View style={styles.classTimeSection}>
-            <Text style={styles.classTime}>{classSlot.time}</Text>
-            <Text style={styles.classDuration}>50 min</Text>
-          </View>
-          
-          <View style={styles.classDetails}>
-            <Text style={styles.classLevel}>{classSlot.type}</Text>
-            <Text style={styles.classInstructor}>{classSlot.instructor}</Text>
-          </View>
-          
-          <View style={styles.classStatus}>
-            {isBooked ? (
-              <Text style={styles.completedText}>Booked</Text>
-            ) : isFull ? (
-              <Text style={styles.fullStatusText}>Full</Text>
-            ) : (
-              <Text style={styles.availableText}>Book</Text>
-            )}
-          </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-  const renderFilterDropdown = (label: string, options: string[], selectedValue: string, onSelect: (value: string) => void, isOpen: boolean, onToggle: () => void) => (
-    <View style={styles.filterContainer}>
-      <TouchableOpacity 
-        style={styles.filterButton}
-        onPress={onToggle}
-      >
-        <Text style={styles.filterButtonText}>{selectedValue === 'All' ? label : selectedValue}</Text>
-        <ChevronDown size={16} color={theme.colors.textSecondary} />
-      </TouchableOpacity>
-      {isOpen && (
-        <View style={styles.filterDropdown}>
-          {options.map((option) => (
-            <TouchableOpacity
-              key={option}
-              style={[
-                styles.filterOption,
-                selectedValue === option && styles.selectedFilterOption
-              ]}
-              onPress={() => {
-                onSelect(option);
-                onToggle();
-              }}
-            >
-              <Text style={[
-                styles.filterOptionText,
-                selectedValue === option && styles.selectedFilterOptionText
-              ]}>
-                {option}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-      )}
-    </View>
-  );
 
   return (
     <View style={styles.container}>
-      {/* Date Slider */}
-      <View style={styles.dateSliderContainer}>
-        <FlatList
-          data={weekDates}
-          renderItem={renderDateItem}
-          keyExtractor={(item) => item.toISOString()}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.dateSlider}
-        />
-      </View>
-
-      {/* Filter Buttons */}
-      <View style={styles.filtersContainer}>
-        {renderFilterDropdown(
-          'Classes', 
-          getUniqueClassTypes(), 
-          selectedFilters.classes,
-          (value) => setSelectedFilters(prev => ({ ...prev, classes: value })),
-          showClassFilter,
-          () => {
-            setShowClassFilter(!showClassFilter);
-            setShowInstructorFilter(false);
-          }
-        )}
-        {renderFilterDropdown(
-          'Instructors', 
-          getUniqueInstructors(), 
-          selectedFilters.instructors,
-          (value) => setSelectedFilters(prev => ({ ...prev, instructors: value })),
-          showInstructorFilter,
-          () => {
-            setShowInstructorFilter(!showInstructorFilter);
-            setShowClassFilter(false);
-          }
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Live Schedule</Text>
+        {isAdmin && (
+          <TouchableOpacity onPress={openCreate} style={styles.addBtn} testID="add-class-btn">
+            <Plus color="#fff" size={18} />
+            <Text style={styles.addBtnText}>New</Text>
+          </TouchableOpacity>
         )}
       </View>
 
-      {/* Selected Date Header */}
-      <View style={styles.selectedDateHeader}>
-        <Text style={styles.selectedDateHeaderText}>{formatDateForDisplay(selectedDate)}</Text>
-      </View>
-
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Classes for Selected Date */}
-        <View style={styles.classesContainer}>
-          {getClassesForSelectedDate().map(renderClassSlot)}
+      {isLoading && (
+        <View style={styles.loading} testID="schedule-loading">
+          <ActivityIndicator color={theme.colors.primary} />
+          <Text style={styles.loadingText}>Loading schedule…</Text>
         </View>
+      )}
 
-        {getClassesForSelectedDate().length === 0 && (
-          <View style={styles.noClassesContainer}>
-            <Text style={styles.noClassesText}>No classes scheduled for this day</Text>
+      {isError && (
+        <View style={styles.error} testID="schedule-error">
+          <Text style={styles.errorText}>Failed to load schedule</Text>
+          <TouchableOpacity onPress={() => refetch()} style={styles.retryBtn}><Text style={styles.retryText}>Retry</Text></TouchableOpacity>
+        </View>
+      )}
+
+      {!isLoading && !isError && (
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.classesContainer} showsVerticalScrollIndicator={false}>
+          {sorted.map((c) => {
+            const dur = durationMin(c.start_time, c.end_time);
+            return (
+              <View key={c.id} style={styles.card} testID={`class-card-${c.id}`}>
+                <View style={styles.cardHeader}>
+                  <Text style={styles.title}>{c.title}</Text>
+                  {isAdmin && (
+                    <View style={styles.actions}>
+                      <TouchableOpacity onPress={() => openEdit(c.id)} style={styles.iconBtn} testID={`edit-${c.id}`}>
+                        <Pencil size={18} color={theme.colors.textSecondary} />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => confirmDelete(c.id)} style={styles.iconBtn} testID={`delete-${c.id}`}>
+                        <Trash2 size={18} color={theme.colors.error} />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+                <Text style={styles.instructor}>{c.instructor}</Text>
+                <View style={styles.metaRow}>
+                  <View style={styles.metaItem}>
+                    <Clock size={16} color={theme.colors.textSecondary} />
+                    <Text style={styles.metaText}>{fmtTime(c.start_time)} - {fmtTime(c.end_time)} • {dur} min</Text>
+                  </View>
+                  {c.capacity !== null && (
+                    <View style={styles.metaItem}>
+                      <Users size={16} color={theme.colors.textSecondary} />
+                      <Text style={styles.metaText}>{c.capacity}</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            );
+          })}
+
+          {sorted.length === 0 && (
+            <View style={styles.noClassesContainer} testID="no-classes">
+              <Text style={styles.noClassesText}>No scheduled classes</Text>
+            </View>
+          )}
+        </ScrollView>
+      )}
+
+      {isAdmin && modalOpenId !== null && (
+        <View style={styles.modal} testID="edit-modal">
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{modalOpenId === 0 ? 'Create Class' : 'Edit Class'}</Text>
+            <TextInput placeholder="Title" value={draft.title} onChangeText={(t) => setDraft({ ...draft, title: t })} style={styles.input} testID="input-title" />
+            <TextInput placeholder="Instructor" value={draft.instructor} onChangeText={(t) => setDraft({ ...draft, instructor: t })} style={styles.input} testID="input-instructor" />
+            <TextInput placeholder="Start ISO" value={draft.start_time} onChangeText={(t) => setDraft({ ...draft, start_time: t })} style={styles.input} autoCapitalize="none" testID="input-start" />
+            <TextInput placeholder="End ISO" value={draft.end_time} onChangeText={(t) => setDraft({ ...draft, end_time: t })} style={styles.input} autoCapitalize="none" testID="input-end" />
+            <TextInput placeholder="Capacity (optional)" value={draft.capacity} onChangeText={(t) => setDraft({ ...draft, capacity: t })} keyboardType="number-pad" style={styles.input} testID="input-capacity" />
+            <View style={styles.modalActions}>
+              <TouchableOpacity onPress={closeModal} style={[styles.modalBtn, styles.cancelBtn]} testID="cancel-modal"><Text style={styles.cancelText}>Cancel</Text></TouchableOpacity>
+              <TouchableOpacity onPress={submit} disabled={creating || updating} style={[styles.modalBtn, styles.saveBtn]} testID="save-modal">
+                {(creating || updating) ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Save</Text>}
+              </TouchableOpacity>
+            </View>
           </View>
-        )}
-
-        {!user && (
-          <View style={styles.loginPrompt}>
-            <Text style={styles.promptTitle}>Ready to Start?</Text>
-            <Text style={styles.promptText}>
-              Sign up to book classes and track your progress
-            </Text>
-            <TouchableOpacity
-              style={styles.promptButton}
-              onPress={() => setShowAuthModal(true)}
-            >
-              <Text style={styles.promptButtonText}>Get Started</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-
-
-      </ScrollView>
-
-      <AuthModal
-        visible={showAuthModal}
-        onClose={() => setShowAuthModal(false)}
-        onSuccess={() => showNotification('Welcome! You can now book classes.', 'success')}
-      />
-
-      <PassPurchaseModal
-        visible={showPassModal}
-        onClose={() => setShowPassModal(false)}
-        onSuccess={(message) => showNotification(message, 'success')}
-      />
-
-      <NotificationBanner
-        message={notification.message}
-        type={notification.type}
-        visible={notification.visible}
-        onHide={hideNotification}
-      />
+        </View>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  dateSliderContainer: {
-    backgroundColor: theme.colors.surface,
-    paddingVertical: theme.spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  dateSlider: {
-    paddingHorizontal: theme.spacing.md,
-    gap: theme.spacing.sm,
-  },
-  dateItem: {
-    alignItems: 'center',
-    paddingVertical: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
-    borderRadius: theme.borderRadius.lg,
-    minWidth: 60,
-  },
-  selectedDateItem: {
-    backgroundColor: theme.colors.primary,
-  },
-  todayDateItem: {
-    backgroundColor: theme.colors.coral,
-  },
-  dayText: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    fontWeight: '500',
-  },
-  selectedDayText: {
-    color: 'white',
-  },
-  todayDayText: {
-    color: 'white',
-  },
-  dateText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-    marginTop: 2,
-  },
-  selectedDateText: {
-    color: 'white',
-  },
-  todayDateText: {
-    color: 'white',
-  },
-  filtersContainer: {
-    flexDirection: 'row',
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    gap: theme.spacing.md,
-    backgroundColor: theme.colors.surface,
-    position: 'relative',
-    zIndex: 1000,
-  },
-  filterContainer: {
-    position: 'relative',
-    flex: 1,
-  },
-  filterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    backgroundColor: theme.colors.background,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    gap: theme.spacing.xs,
-  },
-  filterDropdown: {
-    position: 'absolute',
-    top: '100%',
-    left: 0,
-    right: 0,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    marginTop: 4,
-    maxHeight: 200,
-    zIndex: 1001,
-    ...theme.shadows.md,
-  },
-  filterOption: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  selectedFilterOption: {
-    backgroundColor: theme.colors.primary + '20',
-  },
-  filterOptionText: {
-    fontSize: 14,
-    color: theme.colors.text,
-  },
-  selectedFilterOptionText: {
-    color: theme.colors.primary,
-    fontWeight: '600',
-  },
-  filterButtonText: {
-    fontSize: 14,
-    color: theme.colors.text,
-    fontWeight: '500',
-  },
-  selectedDateHeader: {
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    backgroundColor: theme.colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  selectedDateHeaderText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-  },
-  classesContainer: {
-    padding: theme.spacing.lg,
-    gap: theme.spacing.md,
-  },
-  classSlot: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  fullClassSlot: {
-    opacity: 0.6,
-  },
-  bookedClassSlot: {
-    borderColor: theme.colors.success,
-    backgroundColor: '#f0f9f0',
-  },
-  classRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  classTimeSection: {
-    alignItems: 'flex-start',
-    minWidth: 80,
-  },
-  classTime: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-  },
-  classDuration: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    marginTop: 2,
-  },
-  classDetails: {
-    flex: 1,
-    marginLeft: theme.spacing.md,
-  },
-  classLevel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: theme.colors.text,
-    marginBottom: 2,
-  },
-  classInstructor: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-  },
-  classStatus: {
-    alignItems: 'flex-end',
-  },
-  completedText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.success,
-  },
-  fullStatusText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.error,
-  },
-  availableText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.primary,
-  },
-  noClassesContainer: {
-    padding: theme.spacing.xl,
-    alignItems: 'center',
-  },
-  noClassesText: {
-    fontSize: 16,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-  },
-  loginPrompt: {
-    margin: theme.spacing.lg,
-    padding: theme.spacing.lg,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  passPrompt: {
-    margin: theme.spacing.lg,
-    padding: theme.spacing.lg,
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.borderRadius.lg,
-    alignItems: 'center',
-  },
-  promptTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-    marginBottom: theme.spacing.sm,
-  },
-  promptText: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: theme.spacing.md,
-  },
-  promptButton: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-    borderRadius: theme.borderRadius.md,
-  },
-  promptButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-  },
+  container: { flex: 1, backgroundColor: theme.colors.background },
+  header: { paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.md, backgroundColor: theme.colors.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  headerTitle: { fontSize: 20, fontWeight: '700', color: theme.colors.text },
+  addBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.primary, paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm, borderRadius: theme.borderRadius.md, gap: 8 },
+  addBtnText: { color: '#fff', fontWeight: '600' },
+  loading: { padding: theme.spacing.lg, alignItems: 'center' },
+  loadingText: { marginTop: 8, color: theme.colors.textSecondary },
+  error: { padding: theme.spacing.lg, alignItems: 'center' },
+  errorText: { color: theme.colors.error, marginBottom: 8 },
+  retryBtn: { paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm, borderRadius: theme.borderRadius.sm, borderWidth: 1, borderColor: theme.colors.border },
+  retryText: { color: theme.colors.text },
+  scrollView: { flex: 1 },
+  classesContainer: { padding: theme.spacing.lg, gap: theme.spacing.md },
+  card: { backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.md, padding: theme.spacing.md, borderWidth: 1, borderColor: theme.colors.border },
+  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  title: { fontSize: 16, fontWeight: '700', color: theme.colors.text },
+  instructor: { fontSize: 14, color: theme.colors.textSecondary, marginTop: 4 },
+  metaRow: { flexDirection: 'row', justifyContent: 'space-between', gap: theme.spacing.md, marginTop: 10 },
+  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  metaText: { color: theme.colors.textSecondary },
+  actions: { flexDirection: 'row', gap: 8 },
+  iconBtn: { padding: 6 },
+  noClassesContainer: { padding: theme.spacing.xl, alignItems: 'center' },
+  noClassesText: { color: theme.colors.textSecondary },
+  modal: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  modalCard: { width: '90%', backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.lg, padding: theme.spacing.lg, borderWidth: 1, borderColor: theme.colors.border },
+  modalTitle: { fontSize: 18, fontWeight: '700', marginBottom: theme.spacing.md, color: theme.colors.text },
+  input: { borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.borderRadius.sm, paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm, marginBottom: theme.spacing.sm, backgroundColor: theme.colors.background },
+  modalActions: { marginTop: theme.spacing.md, flexDirection: 'row', justifyContent: 'flex-end', gap: 12 },
+  modalBtn: { paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.md, borderRadius: theme.borderRadius.md },
+  cancelBtn: { backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border },
+  saveBtn: { backgroundColor: theme.colors.primary },
+  cancelText: { color: theme.colors.text },
+  saveText: { color: '#fff', fontWeight: '700' },
 });

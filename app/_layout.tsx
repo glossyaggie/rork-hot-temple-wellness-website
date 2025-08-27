@@ -4,6 +4,9 @@ import { View, ActivityIndicator, Text } from 'react-native';
 import { BookingsProvider } from '../hooks/useBookings';
 import { HabitTrackerProvider } from '../hooks/useHabitTracker';
 import { NotificationProvider } from '../hooks/useNotifications';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const queryClient = new QueryClient();
 
 export default function RootLayout() {
   const { session, loading } = useAuth();
@@ -20,21 +23,23 @@ export default function RootLayout() {
   }
 
   return (
-    <NotificationProvider>
-      <BookingsProvider>
-        <HabitTrackerProvider>
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-            <Stack.Screen name="auth/callback" options={{ headerShown: false, presentation: 'modal' }} />
-          </Stack>
-          {!session ? (
-            <Redirect href="/(auth)/welcome" />
-          ) : (
-            <Redirect href="/(tabs)" />
-          )}
-        </HabitTrackerProvider>
-      </BookingsProvider>
-    </NotificationProvider>
+    <QueryClientProvider client={queryClient}>
+      <NotificationProvider>
+        <BookingsProvider>
+          <HabitTrackerProvider>
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+              <Stack.Screen name="auth/callback" options={{ headerShown: false, presentation: 'modal' }} />
+            </Stack>
+            {!session ? (
+              <Redirect href="/(auth)/welcome" />
+            ) : (
+              <Redirect href="/(tabs)" />
+            )}
+          </HabitTrackerProvider>
+        </BookingsProvider>
+      </NotificationProvider>
+    </QueryClientProvider>
   );
 }

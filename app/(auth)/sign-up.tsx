@@ -43,16 +43,21 @@ export default function SignUp() {
         try {
           const { error: profileErr } = await supabase
             .from('profiles')
-            .update({
-              full_name: fullName,
-              phone,
-              consent_marketing: consentMarketing,
-              terms_version: '1.0',
-              terms_accepted_at: new Date().toISOString(),
-              waiver_signed_at: new Date().toISOString(),
-            })
-            .eq('id', userId);
-          if (profileErr) console.warn('⚠️ Profile update warning (likely unauthenticated until email confirmed):', profileErr);
+            .upsert(
+              [
+                {
+                  id: userId,
+                  full_name: fullName,
+                  phone,
+                  consent_marketing: consentMarketing,
+                  terms_version: '1.0',
+                  terms_accepted_at: new Date().toISOString(),
+                  waiver_signed_at: new Date().toISOString(),
+                },
+              ],
+              { onConflict: 'id' }
+            );
+          if (profileErr) console.warn('⚠️ Profile upsert warning:', profileErr);
         } catch (profileEx) {
           console.warn('⚠️ Profile update exception:', profileEx);
         }
@@ -65,7 +70,8 @@ export default function SignUp() {
           'We sent a verification link to ' + email + '. Open it to activate your account, then return to the app and sign in.'
         );
       } else {
-        Alert.alert('Account created', 'You are now signed in.');
+        Alert.alert('Account created', 'Welcome!');
+        router.replace('/');
       }
     } catch (e: any) {
       console.error('❌ Signup failed', e);

@@ -5,10 +5,8 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   FlatList,
   ImageBackground,
-  Image,
 } from 'react-native';
 import { User, Calendar, CreditCard, LogOut, Target, Flame, QrCode, Award, Gift, ChevronDown, Eye } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
@@ -21,7 +19,6 @@ import HabitCalendar from '@/components/HabitCalendar';
 import NotificationBanner from '@/components/NotificationBanner';
 import QRCodeScanner from '@/components/QRCodeScanner';
 import { router } from 'expo-router';
-import { supabase } from '@/lib/supabase';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -47,7 +44,7 @@ export default function AccountScreen() {
     visible: boolean;
   }>({ message: '', type: 'info', visible: false });
 
-  const { session, role } = useAuth();
+  const { session, role, logout } = useAuth();
   const user = session?.user;
   const { getUpcomingBookings } = useBookings();
   const { markAttendance, getAttendanceStreak, getTotalAttendance } = useHabitTracker();
@@ -107,22 +104,15 @@ export default function AccountScreen() {
     setNotification(prev => ({ ...prev, visible: false }));
   };
 
-  const handleLogout = () => {
-    Alert.alert(
-      'Sign Out',
-      'Are you sure you want to sign out?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Sign Out',
-          style: 'destructive',
-          onPress: async () => {
-            await supabase.auth.signOut();
-            showNotification('Signed out successfully', 'info');
-          },
-        },
-      ]
-    );
+  const handleLogout = async () => {
+    console.log('🔒 Logging out...');
+    const ok = await logout();
+    if (ok) {
+      showNotification('Signed out successfully', 'info');
+      router.replace('/(auth)/welcome');
+    } else {
+      showNotification('Could not sign out. Please try again.', 'error');
+    }
   };
 
   const handleMarkAttendance = async () => {
@@ -218,7 +208,7 @@ export default function AccountScreen() {
               <Text style={styles.userName}>{user?.user_metadata?.full_name || user?.email}</Text>
               <Text style={styles.userEmail}>{user?.email}</Text>
             </View>
-            <TouchableOpacity onPress={handleLogout} style={styles.logoutButton}>
+            <TouchableOpacity onPress={handleLogout} style={styles.logoutButton} testID="logoutButton" accessibilityRole="button" accessibilityLabel="Sign out">
               <LogOut size={20} color={theme.colors.textSecondary} />
             </TouchableOpacity>
           </View>

@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TextInput, SectionList, Pressable, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TextInput, SectionList, Pressable, Platform, KeyboardAvoidingView } from 'react-native';
 import { Clock, Users, Pencil, Plus, Trash2, Calendar, RotateCcw, ChevronDown } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
@@ -246,8 +246,8 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
           const label2 = new Intl.DateTimeFormat(undefined, { day: '2-digit' }).format(d);
           return (
             <Pressable key={idx} onPress={() => setSelectedDayIndex(idx)} testID={`day-${idx}`} style={[styles.dayChip, isSelected ? styles.dayChipSelected : styles.dayChipUnselected]}>
-              <Text style={[styles.dayChipLabel, isSelected && styles.dayChipLabelSelected]}>{label1}</Text>
-              <Text style={[styles.dayChipSub, isSelected && styles.dayChipSubSelected]}>{label2}</Text>
+              <Text allowFontScaling={false} style={[styles.dayChipLabel, isSelected && styles.dayChipLabelSelected]}>{label1}</Text>
+              <Text allowFontScaling={false} style={[styles.dayChipSub, isSelected && styles.dayChipSubSelected]}>{label2}</Text>
             </Pressable>
           );
         })}
@@ -481,20 +481,24 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
 
       {isAdmin && modalOpenId !== null && (
         <View style={styles.modal} testID="edit-modal">
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{modalOpenId === 0 ? 'Create Class' : 'Edit Class'}</Text>
-            <TextInput placeholder="Title" value={draft.title} onChangeText={(t) => setDraft({ ...draft, title: t })} style={styles.input} testID="input-title" />
-            <TextInput placeholder="Instructor" value={draft.instructor} onChangeText={(t) => setDraft({ ...draft, instructor: t })} style={styles.input} testID="input-instructor" />
-            <TextInput placeholder="Start Time (e.g., 6:00 PM)" value={draft.start_time} onChangeText={(t) => setDraft({ ...draft, start_time: t })} style={styles.input} autoCapitalize="none" testID="input-start" />
-            <TextInput placeholder="End Time (e.g., 7:00 PM)" value={draft.end_time} onChangeText={(t) => setDraft({ ...draft, end_time: t })} style={styles.input} autoCapitalize="none" testID="input-end" />
-            <TextInput placeholder="Capacity (optional)" value={draft.capacity} onChangeText={(t) => setDraft({ ...draft, capacity: t })} keyboardType="number-pad" style={styles.input} testID="input-capacity" />
-            <View style={styles.modalActions}>
-              <TouchableOpacity onPress={closeModal} style={[styles.modalBtn, styles.cancelBtn]} testID="cancel-modal"><Text style={styles.cancelText}>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity onPress={submit} disabled={creating || updating} style={[styles.modalBtn, styles.saveBtn]} testID="save-modal">
-                {(creating || updating) ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Save</Text>}
-              </TouchableOpacity>
+          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center' }}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>{modalOpenId === 0 ? 'Create Class' : 'Edit Class'}</Text>
+              <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 12 }}>
+                <TextInput placeholder="Title" value={draft.title} onChangeText={(t) => setDraft({ ...draft, title: t })} style={styles.input} testID="input-title" />
+                <TextInput placeholder="Instructor" value={draft.instructor} onChangeText={(t) => setDraft({ ...draft, instructor: t })} style={styles.input} testID="input-instructor" />
+                <TextInput placeholder="Start Time (e.g., 6:00 PM)" value={draft.start_time} onChangeText={(t) => setDraft({ ...draft, start_time: t })} style={styles.input} autoCapitalize="none" testID="input-start" />
+                <TextInput placeholder="End Time (e.g., 7:00 PM)" value={draft.end_time} onChangeText={(t) => setDraft({ ...draft, end_time: t })} style={styles.input} autoCapitalize="none" testID="input-end" />
+                <TextInput placeholder="Capacity (optional)" value={draft.capacity} onChangeText={(t) => setDraft({ ...draft, capacity: t })} keyboardType="number-pad" style={styles.input} testID="input-capacity" />
+                <View style={styles.modalActions}>
+                  <TouchableOpacity onPress={closeModal} style={[styles.modalBtn, styles.cancelBtn]} testID="cancel-modal"><Text style={styles.cancelText}>Cancel</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={submit} disabled={creating || updating} style={[styles.modalBtn, styles.saveBtn]} testID="save-modal">
+                    {(creating || updating) ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveText}>Save</Text>}
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
             </View>
-          </View>
+          </KeyboardAvoidingView>
         </View>
       )}
     </SafeAreaView>
@@ -509,7 +513,7 @@ const styles = StyleSheet.create({
   addBtnText: { color: '#fff', fontWeight: '600' },
   iconCircle: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.surface },
   weekStrip: { borderBottomWidth: 1, borderBottomColor: theme.colors.border, backgroundColor: theme.colors.surface },
-  weekStripContent: { paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm, paddingBottom: 10, gap: theme.spacing.sm },
+  weekStripContent: { paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm, paddingBottom: 16, gap: theme.spacing.sm },
   dayChip: { width: 72, height: 96, borderRadius: 20, paddingVertical: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   dayChipUnselected: { backgroundColor: '#FFFFFF', borderColor: '#E5E7EB' },
   dayChipSelected: { backgroundColor: '#ff5a5f', borderColor: '#ff5a5f' },

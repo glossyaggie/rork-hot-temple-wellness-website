@@ -32,6 +32,8 @@ const MONTH_COLORS = [
 
 type ViewPeriod = 'current' | 'three-months' | 'yearly';
 
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+
 export default function AccountScreen() {
 
   const [showPassModal, setShowPassModal] = useState(false);
@@ -195,8 +197,10 @@ export default function AccountScreen() {
     return months;
   };
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <View style={styles.container}>
+    <SafeAreaView edges={['top']} style={[styles.container, { paddingTop: insets.top + 8 }] }>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* User Profile */}
         <View style={styles.profileSection}>
@@ -428,7 +432,7 @@ export default function AccountScreen() {
         visible={notification.visible}
         onHide={hideNotification}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

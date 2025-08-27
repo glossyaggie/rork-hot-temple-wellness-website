@@ -54,6 +54,7 @@ const GALLERY_IMAGES = [
   'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=400&h=300&fit=crop',
   'https://images.unsplash.com/photo-1588286840104-8957b019727f?w=400&h=300&fit=crop',
 ];
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function MoreScreen() {
   const { user, logout } = useAuth();
@@ -79,8 +80,10 @@ export default function MoreScreen() {
     logout();
   };
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <View style={styles.container}>
+    <SafeAreaView edges={['top']} style={[styles.container, { paddingTop: insets.top + 8 }]}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
@@ -248,7 +251,7 @@ export default function MoreScreen() {
         onClose={() => setAuthModalVisible(false)}
         initialMode={authMode}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

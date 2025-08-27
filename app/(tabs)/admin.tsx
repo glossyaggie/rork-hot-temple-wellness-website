@@ -38,6 +38,7 @@ const MOCK_INSTRUCTORS: Instructor[] = [];
 
 const DAYS: string[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const TIMES: string[] = [];
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function AdminScreen() {
   const { isStaff, loading } = useAuth();
@@ -673,8 +674,9 @@ function AdminContent() {
     </View>
   );
 
+  const insets = useSafeAreaInsets();
   return (
-    <View style={styles.container}>
+    <SafeAreaView edges={['top']} style={[styles.container, { paddingTop: insets.top + 8 }] }>
       <View style={styles.tabNavigation}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'classes' && styles.activeTab]}
@@ -1057,7 +1059,7 @@ function AdminContent() {
         visible={notification.visible}
         onHide={hideNotificationBanner}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

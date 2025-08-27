@@ -40,6 +40,7 @@ const FAQ_ITEMS = [
     answer: "Our $29 intro offer includes unlimited classes for one week. It's perfect for new members to experience our community and find their favorite classes."
   }
 ];
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function InfoScreen() {
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -85,8 +86,10 @@ export default function InfoScreen() {
     setExpandedFAQ(expandedFAQ === index ? null : index);
   };
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <View style={styles.container}>
+    <SafeAreaView edges={['top']} style={[styles.container, { paddingTop: insets.top + 8 }] }>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Hero Section */}
         <View style={styles.hero}>
@@ -250,7 +253,7 @@ export default function InfoScreen() {
         visible={notification.visible}
         onHide={hideNotification}
       />
-    </View>
+    </SafeAreaView>
   );
 }
 

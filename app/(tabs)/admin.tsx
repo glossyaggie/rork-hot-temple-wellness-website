@@ -77,29 +77,9 @@ const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'
 const TIMES = ['5:30 AM', '6:00 AM', '8:00 AM', '9:30 AM', '11:00 AM', '12:30 PM', '4:00 PM', '4:30 PM', '6:00 PM', '6:30 PM'];
 
 export default function AdminScreen() {
-  const { user, isStaff, isAdmin, isLoading } = useAuth();
+  const { isStaff, loading } = useAuth();
   const [activeTab, setActiveTab] = useState<'classes' | 'instructors' | 'notifications' | 'contacts'>('classes');
-  
-  // Show loading state
-  if (isLoading) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={styles.tabTitle}>Loading...</Text>
-      </View>
-    );
-  }
-  
-  // Block access for non-staff users
-  if (!isStaff) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
-        <Text style={[styles.tabTitle, { textAlign: 'center', marginBottom: 16 }]}>Access Denied</Text>
-        <Text style={[styles.comingSoonText, { textAlign: 'center' }]}>
-          You need admin or instructor privileges to access this section.
-        </Text>
-      </View>
-    );
-  }
+
   const [showClassModal, setShowClassModal] = useState(false);
   const [showInstructorModal, setShowInstructorModal] = useState(false);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
@@ -129,6 +109,11 @@ export default function AdminScreen() {
   const smsStats = getSmsStats();
   const recentNotifications = getRecentNotifications();
 
+  // testIDs
+  const testIDs = {
+    container: 'admin-container',
+  } as const;
+
   const [newClass, setNewClass] = useState<{
     day: string;
     time: string;
@@ -154,6 +139,23 @@ export default function AdminScreen() {
     channels: ['push'] as ('push' | 'email' | 'sms')[],
     scheduledFor: new Date().toISOString().split('T')[0],
   });
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={styles.tabTitle}>Loading...</Text>
+      </View>
+    );
+  }
+
+  if (!isStaff) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
+        <Text style={[styles.tabTitle, { textAlign: 'center', marginBottom: 16 }]}>Access Denied</Text>
+        <Text style={[styles.comingSoonText, { textAlign: 'center' }]}>You need admin or instructor privileges to access this section.</Text>
+      </View>
+    );
+  }
 
   const handleImportContacts = async () => {
     if (!csvData.trim()) {

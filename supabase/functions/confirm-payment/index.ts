@@ -4,8 +4,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const STRIPE_SECRET_KEY = Deno.env.get('STRIPE_SECRET_KEY')!;
 const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: '2024-06-20' });
 
-const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
-const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const SUPABASE_URL = Deno.env.get('PROJECT_URL') ?? Deno.env.get('SUPABASE_URL')!;
+const SERVICE_ROLE_KEY = Deno.env.get('SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
 const cors = {

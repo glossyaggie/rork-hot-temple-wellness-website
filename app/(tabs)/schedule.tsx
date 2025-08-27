@@ -291,131 +291,7 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
           ) : null}
         </ScrollView>
 
-        {filtersOpen && (
-          Platform.OS === 'web' ? (
-            <View style={styles.webModalOverlay}>
-              <Pressable style={styles.webModalBackdrop} onPress={() => setFiltersOpen(false)} />
-              <View style={styles.webModalCard} testID="filters-web-modal">
-                <ScrollView contentContainerStyle={styles.webModalContent}>
-                  <Text style={styles.webModalTitle}>Filters</Text>
 
-                  <Text style={styles.sheetSectionTitle}>Class Type</Text>
-                  <View style={styles.sheetChipsRow}>
-                    {titleOptions.map((t) => {
-                      const active = selectedTitles.has(t);
-                      return (
-                        <TouchableOpacity key={`t-${t}`} onPress={() => {
-                          const next = new Set(selectedTitles);
-                          if (active) next.delete(t); else next.add(t);
-                          setSelectedTitles(next);
-                        }} style={[styles.sheetChip, styles.sheetChipWeb, active && styles.sheetChipActive]} testID={`sheet-title-${t}`}>
-                          <Text style={[styles.sheetChipText, styles.sheetChipTextWeb, active && styles.sheetChipTextActive]}>{t}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-
-                  <Text style={[styles.sheetSectionTitle, { marginTop: 12 }]}>Instructor</Text>
-                  <View style={styles.sheetChipsRow}>
-                    {instructorOptions.map((i) => {
-                      const active = selectedInstructors.has(i);
-                      return (
-                        <TouchableOpacity key={`i-${i}`} onPress={() => {
-                          const next = new Set(selectedInstructors);
-                          if (active) next.delete(i); else next.add(i);
-                          setSelectedInstructors(next);
-                        }} style={[styles.sheetChip, styles.sheetChipWeb, active && styles.sheetChipActive]} testID={`sheet-instructor-${i}`}>
-                          <Text style={[styles.sheetChipText, styles.sheetChipTextWeb, active && styles.sheetChipTextActive]}>{i}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-
-                  <Text style={[styles.sheetSectionTitle, { marginTop: 12 }]}>Duration</Text>
-                  <View style={styles.sheetChipsRow}>
-                    {[45,60,75,90].map((m) => {
-                      const active = durationFilter === m;
-                      return (
-                        <TouchableOpacity key={`d-${m}`} onPress={() => setDurationFilter(active ? null : m)} style={[styles.sheetChip, styles.sheetChipWeb, active && styles.sheetChipActive]} testID={`sheet-duration-${m}`}>
-                          <Text style={[styles.sheetChipText, styles.sheetChipTextWeb, active && styles.sheetChipTextActive]}>{m}m+</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-
-                  <View style={styles.webModalActions}>
-                    <TouchableOpacity onPress={resetFilters} style={[styles.sheetBtn, styles.sheetBtnSecondary]} testID="sheet-reset-web">
-                      <Text style={styles.sheetBtnSecondaryText}>Reset All</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setFiltersOpen(false)} style={[styles.sheetBtn, styles.sheetBtnPrimary]} testID="sheet-apply-web">
-                      <Text style={styles.sheetBtnPrimaryText}>Apply</Text>
-                    </TouchableOpacity>
-                  </View>
-                </ScrollView>
-              </View>
-            </View>
-          ) : (
-            <View style={styles.bottomSheetOverlay}>
-              <Pressable style={styles.bottomSheetBackdrop} onPress={() => setFiltersOpen(false)} />
-              <View style={[styles.bottomSheet, { maxHeight: '92%', paddingBottom: 16 + insets.bottom }]} testID="filters-bottom-sheet">
-                <ScrollView contentContainerStyle={styles.bottomSheetContent}>
-                  <Text style={styles.sheetSectionTitle}>Class Type</Text>
-                  <View style={styles.sheetChipsRow}>
-                    {titleOptions.map((t) => {
-                      const active = selectedTitles.has(t);
-                      return (
-                        <TouchableOpacity key={`t-${t}`} onPress={() => {
-                          const next = new Set(selectedTitles);
-                          if (active) next.delete(t); else next.add(t);
-                          setSelectedTitles(next);
-                        }} style={[styles.sheetChip, active && styles.sheetChipActive]} testID={`sheet-title-${t}`}>
-                          <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{t}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-
-                  <Text style={[styles.sheetSectionTitle, { marginTop: 12 }]}>Instructor</Text>
-                  <View style={styles.sheetChipsRow}>
-                    {instructorOptions.map((i) => {
-                      const active = selectedInstructors.has(i);
-                      return (
-                        <TouchableOpacity key={`i-${i}`} onPress={() => {
-                          const next = new Set(selectedInstructors);
-                          if (active) next.delete(i); else next.add(i);
-                          setSelectedInstructors(next);
-                        }} style={[styles.sheetChip, active && styles.sheetChipActive]} testID={`sheet-instructor-${i}`}>
-                          <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{i}</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-
-                  <Text style={[styles.sheetSectionTitle, { marginTop: 12 }]}>Duration</Text>
-                  <View style={styles.sheetChipsRow}>
-                    {[45,60,75,90].map((m) => {
-                      const active = durationFilter === m;
-                      return (
-                        <TouchableOpacity key={`d-${m}`} onPress={() => setDurationFilter(active ? null : m)} style={[styles.sheetChip, active && styles.sheetChipActive]} testID={`sheet-duration-${m}`}>
-                          <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{m}m+</Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-
-                  <View style={styles.sheetActions}>
-                    <TouchableOpacity onPress={resetFilters} style={[styles.sheetBtn, styles.sheetBtnSecondary]} testID="sheet-reset">
-                      <Text style={styles.sheetBtnSecondaryText}>Reset All</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setFiltersOpen(false)} style={[styles.sheetBtn, styles.sheetBtnPrimary]} testID="sheet-apply">
-                      <Text style={styles.sheetBtnPrimaryText}>Apply</Text>
-                    </TouchableOpacity>
-                  </View>
-                </ScrollView>
-              </View>
-            </View>
-          )
-        )}
       </View>
 
       {isLoading && (
@@ -499,6 +375,132 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
             </View>
           )}
         />
+      )}
+
+      {filtersOpen && (
+        Platform.OS === 'web' ? (
+          <View style={styles.webModalOverlay} pointerEvents="box-none">
+            <Pressable style={styles.webModalBackdrop} onPress={() => setFiltersOpen(false)} />
+            <View style={styles.webModalCard} testID="filters-web-modal">
+              <ScrollView contentContainerStyle={styles.webModalContent}>
+                <Text style={styles.webModalTitle}>Filters</Text>
+
+                <Text style={styles.sheetSectionTitle}>Class Type</Text>
+                <View style={styles.sheetChipsRow}>
+                  {titleOptions.map((t) => {
+                    const active = selectedTitles.has(t);
+                    return (
+                      <TouchableOpacity key={`t-${t}`} onPress={() => {
+                        const next = new Set(selectedTitles);
+                        if (active) next.delete(t); else next.add(t);
+                        setSelectedTitles(next);
+                      }} style={[styles.sheetChip, styles.sheetChipWeb, active && styles.sheetChipActive]} testID={`sheet-title-${t}`}>
+                        <Text style={[styles.sheetChipText, styles.sheetChipTextWeb, active && styles.sheetChipTextActive]}>{t}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <Text style={[styles.sheetSectionTitle, { marginTop: 12 }]}>Instructor</Text>
+                <View style={styles.sheetChipsRow}>
+                  {instructorOptions.map((i) => {
+                    const active = selectedInstructors.has(i);
+                    return (
+                      <TouchableOpacity key={`i-${i}`} onPress={() => {
+                        const next = new Set(selectedInstructors);
+                        if (active) next.delete(i); else next.add(i);
+                        setSelectedInstructors(next);
+                      }} style={[styles.sheetChip, styles.sheetChipWeb, active && styles.sheetChipActive]} testID={`sheet-instructor-${i}`}>
+                        <Text style={[styles.sheetChipText, styles.sheetChipTextWeb, active && styles.sheetChipTextActive]}>{i}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <Text style={[styles.sheetSectionTitle, { marginTop: 12 }]}>Duration</Text>
+                <View style={styles.sheetChipsRow}>
+                  {[45,60,75,90].map((m) => {
+                    const active = durationFilter === m;
+                    return (
+                      <TouchableOpacity key={`d-${m}`} onPress={() => setDurationFilter(active ? null : m)} style={[styles.sheetChip, styles.sheetChipWeb, active && styles.sheetChipActive]} testID={`sheet-duration-${m}`}>
+                        <Text style={[styles.sheetChipText, styles.sheetChipTextWeb, active && styles.sheetChipTextActive]}>{m}m+</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.webModalActions}>
+                  <TouchableOpacity onPress={resetFilters} style={[styles.sheetBtn, styles.sheetBtnSecondary]} testID="sheet-reset-web">
+                    <Text style={styles.sheetBtnSecondaryText}>Reset All</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setFiltersOpen(false)} style={[styles.sheetBtn, styles.sheetBtnPrimary]} testID="sheet-apply-web">
+                    <Text style={styles.sheetBtnPrimaryText}>Apply</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        ) : (
+          <View style={styles.bottomSheetOverlay} pointerEvents="box-none">
+            <Pressable style={styles.bottomSheetBackdrop} onPress={() => setFiltersOpen(false)} />
+            <View style={[styles.bottomSheet, { maxHeight: '90%', minHeight: '60%', paddingBottom: 16 + insets.bottom }]} testID="filters-bottom-sheet">
+              <ScrollView contentContainerStyle={styles.bottomSheetContent}>
+                <Text style={styles.sheetSectionTitle}>Class Type</Text>
+                <View style={styles.sheetChipsRow}>
+                  {titleOptions.map((t) => {
+                    const active = selectedTitles.has(t);
+                    return (
+                      <TouchableOpacity key={`t-${t}`} onPress={() => {
+                        const next = new Set(selectedTitles);
+                        if (active) next.delete(t); else next.add(t);
+                        setSelectedTitles(next);
+                      }} style={[styles.sheetChip, active && styles.sheetChipActive]} testID={`sheet-title-${t}`}>
+                        <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{t}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <Text style={[styles.sheetSectionTitle, { marginTop: 12 }]}>Instructor</Text>
+                <View style={styles.sheetChipsRow}>
+                  {instructorOptions.map((i) => {
+                    const active = selectedInstructors.has(i);
+                    return (
+                      <TouchableOpacity key={`i-${i}`} onPress={() => {
+                        const next = new Set(selectedInstructors);
+                        if (active) next.delete(i); else next.add(i);
+                        setSelectedInstructors(next);
+                      }} style={[styles.sheetChip, active && styles.sheetChipActive]} testID={`sheet-instructor-${i}`}>
+                        <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{i}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <Text style={[styles.sheetSectionTitle, { marginTop: 12 }]}>Duration</Text>
+                <View style={styles.sheetChipsRow}>
+                  {[45,60,75,90].map((m) => {
+                    const active = durationFilter === m;
+                    return (
+                      <TouchableOpacity key={`d-${m}`} onPress={() => setDurationFilter(active ? null : m)} style={[styles.sheetChip, active && styles.sheetChipActive]} testID={`sheet-duration-${m}`}>
+                        <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{m}m+</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.sheetActions}>
+                  <TouchableOpacity onPress={resetFilters} style={[styles.sheetBtn, styles.sheetBtnSecondary]} testID="sheet-reset">
+                    <Text style={styles.sheetBtnSecondaryText}>Reset All</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setFiltersOpen(false)} style={[styles.sheetBtn, styles.sheetBtnPrimary]} testID="sheet-apply">
+                    <Text style={styles.sheetBtnPrimaryText}>Apply</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        )
       )}
 
       {(datePickerOpen) && (

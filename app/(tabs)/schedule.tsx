@@ -1,14 +1,30 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TextInput, SectionList } from 'react-native';
-import { Clock, Users, Pencil, Plus, Trash2, Calendar, RotateCcw } from 'lucide-react-native';
+import { Clock, Users, Pencil, Plus, Trash2, Calendar, RotateCcw, ChevronDown } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useSchedule, ScheduleRow } from '@/hooks/useSchedule';
 
-function fmtTime(iso: string): string {
-  const d = new Date(iso);
-  const h = d.getHours();
-  const m = d.getMinutes();
+function getDatePart(iso: string): string {
+  const tIndex = iso.indexOf('T');
+  return tIndex > 0 ? iso.slice(0, tIndex) : iso;
+}
+
+function getTimePart(iso: string): string {
+  const tIndex = iso.indexOf('T');
+  if (tIndex < 0) return '';
+  const time = iso.slice(tIndex + 1);
+  const hhmm = time.slice(0,5);
+  return hhmm;
+}
+
+function fmtTimeLocalString(iso: string): string {
+  const hhmm = getTimePart(iso);
+  if (!hhmm) return '';
+  const [hStr, mStr] = hhmm.split(':');
+  const h = Number(hStr);
+  const m = Number(mStr);
+  if (Number.isNaN(h) || Number.isNaN(m)) return hhmm;
   const hours12 = ((h + 11) % 12) + 1;
   const mm = m.toString().padStart(2, '0');
   const ampm = h >= 12 ? 'PM' : 'AM';
@@ -53,12 +69,23 @@ function dateKey(date: Date): string {
   return `${y}-${m}-${d}`;
 }
 
+function formatHeaderFromDateKey(key: string): string {
+  const [y, m, d] = key.split('-').map((x) => Number(x));
+  const dt = new Date(y, (m - 1), d);
+  const weekday = new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(dt);
+  const day = new Intl.DateTimeFormat(undefined, { day: 'numeric' }).format(dt);
+  const month = new Intl.DateTimeFormat(undefined, { month: 'short' }).format(dt);
+  return `${weekday}, ${day} ${month}`;
+}
+
 export default function ScheduleScreen() {
   const { role } = useAuth();
   const isAdmin = role === 'admin';
 
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedDayIndex, setSelectedDayIndex] = useState<number | null>(null); // 0..6 or null for whole week
+  const [titleDropdownOpen, setTitleDropdownOpen] = useState<boolean>(false);
+  const [instructorDropdownOpen, setInstructorDropdownOpen] = useState<boolean>(false);
   const [selectedTitles, setSelectedTitles] = useState<Set<string>>(new Set<string>());
   const [selectedInstructors, setSelectedInstructors] = useState<Set<string>>(new Set<string>());
   const [durationFilter, setDurationFilter] = useState<number | null>(null); // minutes
@@ -66,11 +93,7 @@ export default function ScheduleScreen() {
   const weekStart = useMemo(() => startOfWeekISO(selectedDate), [selectedDate]);
   const weekEnd = useMemo(() => endOfWeekISO(selectedDate), [selectedDate]);
 
-  const { items, isLoading, isError, refetch, add, update, remove, creating, updating } = useSchedule({
-    startIso: weekStart.toISOString(),
-    endIso: weekEnd.toISOString(),
-    hidePast: true,
-  });
+  const { items, isLoading, isError, refetch, add, update, remove, creating, updating } = useSchedule({});
 
   const [modalOpenId, setModalOpenId] = useState<number | null>(null);
   const [datePickerOpen, setDatePickerOpen] = useState<boolean>(false);
@@ -90,7 +113,8 @@ export default function ScheduleScreen() {
   const filteredByDay = useMemo(() => {
     if (selectedDayIndex === null) return items;
     const day = allDays[selectedDayIndex];
-    return items.filter(r => sameDay(new Date(r.start_time), day));
+    const key = dateKey(day);
+    return items.filter(r => getDatePart(r.start_time) === key);
   }, [items, selectedDayIndex, allDays]);
 
   const filteredByChips = useMemo(() => {
@@ -99,13 +123,10 @@ export default function ScheduleScreen() {
     if (selectedInstructors.size) list = list.filter(r => r.instructor && selectedInstructors.has(r.instructor));
     if (durationFilter) list = list.filter(r => durationMin(r.start_time, r.end_time) >= durationFilter);
 
-    // Hide past classes by default when viewing current week and no specific day selected
-    const now = Date.now();
-    if (selectedDayIndex === null) list = list.filter(r => new Date(r.start_time).getTime() >= now);
     return list.slice().sort((a, b) => {
-      const at = new Date(a.start_time).getTime();
-      const bt = new Date(b.start_time).getTime();
-      if (at !== bt) return at - bt;
+      const at = a.start_time;
+      const bt = b.start_time;
+      if (at !== bt) return at < bt ? -1 : 1;
       return (a.title ?? '').localeCompare(b.title ?? '');
     });
   }, [filteredByDay, selectedTitles, selectedInstructors, durationFilter, selectedDayIndex]);
@@ -113,9 +134,8 @@ export default function ScheduleScreen() {
   const sections = useMemo(() => {
     const map = new Map<string, { title: string; data: ScheduleRow[] }>();
     filteredByChips.forEach(r => {
-      const dt = new Date(r.start_time);
-      const key = dateKey(dt);
-      const label = dayLabel(dt);
+      const key = getDatePart(r.start_time);
+      const label = formatHeaderFromDateKey(key);
       if (!map.has(key)) map.set(key, { title: label, data: [] });
       map.get(key)?.data.push(r);
     });
@@ -207,51 +227,84 @@ export default function ScheduleScreen() {
         })}
       </ScrollView>
 
-      {/* Filter chips */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filters} contentContainerStyle={styles.filtersContent} testID="filters">
-        <TouchableOpacity
-          onPress={() => resetFilters()}
-          style={[styles.chip, styles.chipReset]}
-          testID="chip-reset"
-        >
-          <Text style={[styles.chipText, styles.chipResetText]}>Reset All</Text>
-        </TouchableOpacity>
+      {/* Compact filter row */}
+      <View style={styles.filters} testID="filters">
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filtersContent}>
+          <TouchableOpacity
+            onPress={() => resetFilters()}
+            style={[styles.pillBtn, styles.pillReset]}
+            testID="btn-reset"
+          >
+            <RotateCcw size={14} color={theme.colors.textSecondary} />
+            <Text style={styles.pillText}>Reset</Text>
+          </TouchableOpacity>
 
-        {titleOptions.map((t) => {
-          const active = selectedTitles.has(t);
-          return (
-            <TouchableOpacity key={`t-${t}`} onPress={() => {
-              const next = new Set(selectedTitles);
-              if (active) next.delete(t); else next.add(t);
-              setSelectedTitles(next);
-            }} style={[styles.chip, active && styles.chipActive]} testID={`chip-title-${t}`}>
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{t}</Text>
-            </TouchableOpacity>
-          );
-        })}
+          <TouchableOpacity
+            onPress={() => { setTitleDropdownOpen(v => !v); setInstructorDropdownOpen(false); }}
+            style={styles.pillBtn}
+            testID="btn-class-type"
+          >
+            <Text style={styles.pillText}>{selectedTitles.size ? `${selectedTitles.size} Class${selectedTitles.size>1?'es':''}` : 'Class Type'}</Text>
+            <ChevronDown size={14} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
 
-        {instructorOptions.map((i) => {
-          const active = selectedInstructors.has(i);
-          return (
-            <TouchableOpacity key={`i-${i}`} onPress={() => {
-              const next = new Set(selectedInstructors);
-              if (active) next.delete(i); else next.add(i);
-              setSelectedInstructors(next);
-            }} style={[styles.chip, active && styles.chipActive]} testID={`chip-instructor-${i}`}>
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{i}</Text>
-            </TouchableOpacity>
-          );
-        })}
+          <TouchableOpacity
+            onPress={() => { setInstructorDropdownOpen(v => !v); setTitleDropdownOpen(false); }}
+            style={styles.pillBtn}
+            testID="btn-instructor"
+          >
+            <Text style={styles.pillText}>{selectedInstructors.size ? `${selectedInstructors.size} Instructor${selectedInstructors.size>1?'s':''}` : 'Instructor'}</Text>
+            <ChevronDown size={14} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
 
-        {[45, 60, 75, 90].map((m) => {
-          const active = durationFilter === m;
-          return (
-            <TouchableOpacity key={`d-${m}`} onPress={() => setDurationFilter(active ? null : m)} style={[styles.chip, active && styles.chipActive]} testID={`chip-duration-${m}`}>
-              <Text style={[styles.chipText, active && styles.chipTextActive]}>{m} min+</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+          {[45, 60, 75, 90].map((m) => {
+            const active = durationFilter === m;
+            return (
+              <TouchableOpacity key={`d-${m}`} onPress={() => setDurationFilter(active ? null : m)} style={[styles.pillBtn, active && styles.pillActive]} testID={`btn-duration-${m}`}>
+                <Text style={[styles.pillText, active && styles.pillTextActive]}>{m}m+</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+
+        {titleDropdownOpen && (
+          <View style={styles.dropdown} testID="dropdown-title">
+            <ScrollView style={{ maxHeight: 220 }}>
+              {titleOptions.map((t) => {
+                const active = selectedTitles.has(t);
+                return (
+                  <TouchableOpacity key={`t-${t}`} onPress={() => {
+                    const next = new Set(selectedTitles);
+                    if (active) next.delete(t); else next.add(t);
+                    setSelectedTitles(next);
+                  }} style={styles.dropdownItem} testID={`opt-title-${t}`}>
+                    <Text style={[styles.dropdownText, active && styles.dropdownTextActive]}>{t}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
+        {instructorDropdownOpen && (
+          <View style={styles.dropdown} testID="dropdown-instructor">
+            <ScrollView style={{ maxHeight: 220 }}>
+              {instructorOptions.map((i) => {
+                const active = selectedInstructors.has(i);
+                return (
+                  <TouchableOpacity key={`i-${i}`} onPress={() => {
+                    const next = new Set(selectedInstructors);
+                    if (active) next.delete(i); else next.add(i);
+                    setSelectedInstructors(next);
+                  }} style={styles.dropdownItem} testID={`opt-instructor-${i}`}>
+                    <Text style={[styles.dropdownText, active && styles.dropdownTextActive]}>{i}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+      </View>
 
       {isLoading && (
         <View style={styles.loading} testID="schedule-loading">
@@ -303,7 +356,7 @@ export default function ScheduleScreen() {
                 <View style={styles.metaRow}>
                   <View style={styles.metaItem}>
                     <Clock size={16} color={theme.colors.textSecondary} />
-                    <Text style={styles.metaText}>{fmtTime(c.start_time)} - {fmtTime(c.end_time)} • {dur} min</Text>
+                    <Text style={styles.metaText}>{fmtTimeLocalString(c.start_time)} - {fmtTimeLocalString(c.end_time)} • {dur} min</Text>
                   </View>
                   {c.capacity !== null && (
                     <View style={styles.metaItem}>
@@ -406,13 +459,16 @@ const styles = StyleSheet.create({
   dayPillSub: { color: theme.colors.textSecondary, fontSize: 12 },
   dayPillTextSelected: { color: '#fff' },
   filters: { backgroundColor: theme.colors.surface },
-  filtersContent: { paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.sm, gap: theme.spacing.sm },
-  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.background },
-  chipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
-  chipText: { color: theme.colors.text },
-  chipTextActive: { color: '#fff', fontWeight: '700' },
-  chipReset: { backgroundColor: theme.colors.surface, borderColor: theme.colors.border },
-  chipResetText: { color: theme.colors.textSecondary },
+  filtersContent: { paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.sm, gap: theme.spacing.sm, alignItems: 'center' },
+  pillBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.background },
+  pillReset: { backgroundColor: theme.colors.surface },
+  pillActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  pillText: { color: theme.colors.textSecondary, fontSize: 12 },
+  pillTextActive: { color: '#fff', fontWeight: '700' },
+  dropdown: { position: 'absolute', left: theme.spacing.lg, right: theme.spacing.lg, top: 44, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.borderRadius.md, paddingVertical: 6, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, elevation: 2 },
+  dropdownItem: { paddingVertical: 10, paddingHorizontal: 12 },
+  dropdownText: { color: theme.colors.text },
+  dropdownTextActive: { color: theme.colors.primary, fontWeight: '700' },
   loading: { padding: theme.spacing.lg, alignItems: 'center' },
   loadingText: { marginTop: 8, color: theme.colors.textSecondary, marginBottom: theme.spacing.md },
   skeletonList: { width: '100%', paddingHorizontal: theme.spacing.lg, gap: theme.spacing.md },

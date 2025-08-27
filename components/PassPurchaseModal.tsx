@@ -40,7 +40,7 @@ export default function PassPurchaseModal({ visible, onClose, onSuccess, priceMa
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
 
   const safePriceMap: PriceMap = priceMap ?? {};
-  const available = useMemo(() => PASSES.filter(p => safePriceMap[p.id as keyof PriceMap]), [safePriceMap]);
+  const available = useMemo(() => PASSES, [safePriceMap]);
 
   const handlePurchase = async (pass: Pass) => {
     try {
@@ -114,7 +114,7 @@ export default function PassPurchaseModal({ visible, onClose, onSuccess, priceMa
                 key={pass.id}
                 style={[styles.passCard, isVIP && styles.vipCard, isPopular && styles.popularCard]}
                 onPress={() => handlePurchase(pass)}
-                disabled={loading}
+                disabled={loading || !safePriceMap[pass.id as keyof PriceMap]}
                 testID={`buy-${pass.id}`}
               >
                 {isPopular && (
@@ -129,7 +129,7 @@ export default function PassPurchaseModal({ visible, onClose, onSuccess, priceMa
                 )}
                 <View style={styles.passHeader}>
                   <Text style={[styles.passName, isVIP && styles.vipText]}>{pass.name}</Text>
-                  <Text style={[styles.passPrice, isVIP && styles.vipPrice]}>Stripe Price</Text>
+                  <Text style={[styles.passPrice, isVIP && styles.vipPrice]}>{safePriceMap[pass.id as keyof PriceMap] ? 'Available' : 'Not configured'}</Text>
                 </View>
                 <Text style={styles.passDescription}>{pass.description}</Text>
                 <View style={styles.passDetails}>
@@ -139,6 +139,9 @@ export default function PassPurchaseModal({ visible, onClose, onSuccess, priceMa
                     <Text style={styles.passCredits}>{pass.credits} {pass.credits === 1 ? 'class' : 'classes'}</Text>
                   )}
                 </View>
+                {!safePriceMap[pass.id as keyof PriceMap] && (
+                  <Text style={{ color: theme.colors.error, marginTop: 8 }}>Add Price ID to enable purchase</Text>
+                )}
                 {busy && (
                   <View style={styles.loadingOverlay}>
                     <ActivityIndicator color={theme.colors.primary} />
@@ -153,6 +156,9 @@ export default function PassPurchaseModal({ visible, onClose, onSuccess, priceMa
               <Text style={{ color: lastSessionId ? '#fff' : theme.colors.textSecondary, fontWeight: '700' }}>{lastSessionId ? 'I completed payment' : 'Start a checkout to enable confirm'}</Text>
             </TouchableOpacity>
             <Text style={styles.footerNote}>After finishing Stripe checkout, tap “I completed payment”.</Text>
+            {available.every(p => !safePriceMap[p.id as keyof PriceMap]) && (
+              <Text style={[styles.footerNote, { color: theme.colors.error }]}>No Stripe Price IDs configured. Passes are visible but disabled.</Text>
+            )}
           </View>
         </ScrollView>
       </View>

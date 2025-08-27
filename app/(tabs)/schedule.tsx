@@ -120,23 +120,48 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
     if (selectedInstructors.size) list = list.filter(r => r.instructor && selectedInstructors.has(r.instructor));
     if (durationFilter) list = list.filter(r => minutesBetween(r.start_time, r.end_time) >= durationFilter);
 
+    const toMin = (s: string) => {
+      const parts = s.trim().split(' ');
+      const t = parts[0] ?? '';
+      const ampm = (parts[1] ?? '').toUpperCase();
+      const hm = t.split(':');
+      let h = Number(hm[0] ?? 0);
+      const m = Number(hm[1] ?? 0);
+      if (ampm === 'PM' && h !== 12) h += 12;
+      if (ampm === 'AM' && h === 12) h = 0;
+      return h * 60 + m;
+    };
+
     return list.slice().sort((a, b) => {
-      const at = a.start_time;
-      const bt = b.start_time;
-      if (at !== bt) return at < bt ? -1 : 1;
+      const am = toMin(a.start_time);
+      const bm = toMin(b.start_time);
+      if (am !== bm) return am - bm;
       return (a.title ?? '').localeCompare(b.title ?? '');
     });
   }, [filteredByDay, selectedTitles, selectedInstructors, durationFilter, selectedDayIndex]);
 
   const sections = useMemo(() => {
     const map = new Map<string, { title: string; data: ScheduleRow[] }>();
+    const toMin = (s: string) => {
+      const parts = s.trim().split(' ');
+      const t = parts[0] ?? '';
+      const ampm = (parts[1] ?? '').toUpperCase();
+      const hm = t.split(':');
+      let h = Number(hm[0] ?? 0);
+      const m = Number(hm[1] ?? 0);
+      if (ampm === 'PM' && h !== 12) h += 12;
+      if (ampm === 'AM' && h === 12) h = 0;
+      return h * 60 + m;
+    };
     filteredByChips.forEach(r => {
       const key = r.date;
       const label = formatHeaderFromDateKey(key);
       if (!map.has(key)) map.set(key, { title: label, data: [] });
       map.get(key)?.data.push(r);
     });
-    return Array.from(map.entries()).sort((a, b) => a[0].localeCompare(b[0])).map(([_, v]) => v);
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([_, v]) => ({ ...v, data: v.data.slice().sort((a, b) => toMin(a.start_time) - toMin(b.start_time)) }));
   }, [filteredByChips]);
 
   const resetFilters = useCallback(() => {
@@ -269,7 +294,7 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
         {filtersOpen && (
           <View style={styles.bottomSheetOverlay}>
             <Pressable style={styles.bottomSheetBackdrop} onPress={() => setFiltersOpen(false)} />
-            <View style={styles.bottomSheet} testID="filters-bottom-sheet">
+            <View style={[styles.bottomSheet, { maxHeight: '80%', paddingBottom: 16 + insets.bottom }]} testID="filters-bottom-sheet">
               <ScrollView contentContainerStyle={styles.bottomSheetContent}>
                 <Text style={styles.sheetSectionTitle}>Class Type</Text>
                 <View style={styles.sheetChipsRow}>
@@ -394,6 +419,7 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
           contentContainerStyle={styles.listContent}
           stickySectionHeadersEnabled
           showsVerticalScrollIndicator={false}
+          scrollEnabled={!filtersOpen}
           testID="schedule-list"
           getItemLayout={(data, index) => {
             const ITEM_HEIGHT = 112;
@@ -483,7 +509,7 @@ const styles = StyleSheet.create({
   addBtnText: { color: '#fff', fontWeight: '600' },
   iconCircle: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.surface },
   weekStrip: { borderBottomWidth: 1, borderBottomColor: theme.colors.border, backgroundColor: theme.colors.surface },
-  weekStripContent: { paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm, gap: theme.spacing.sm },
+  weekStripContent: { paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm, paddingBottom: 10, gap: theme.spacing.sm },
   dayChip: { width: 72, height: 96, borderRadius: 20, paddingVertical: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   dayChipUnselected: { backgroundColor: '#FFFFFF', borderColor: '#E5E7EB' },
   dayChipSelected: { backgroundColor: '#ff5a5f', borderColor: '#ff5a5f' },

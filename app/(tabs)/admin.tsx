@@ -162,16 +162,30 @@ function AdminContent() {
     setNotification(prev => ({ ...prev, visible: false }));
   };
 
-  const [draft, setDraft] = useState<{ title: string; instructor: string; start_time: string; end_time: string; capacity: string }>({ title: '', instructor: '', start_time: '', end_time: '', capacity: '' });
+  const [draft, setDraft] = useState<{ title: string; instructor: string; date: string; day: string; start_time: string; end_time: string; capacity: string }>({ title: '', instructor: '', date: new Date().toISOString().slice(0,10), day: new Intl.DateTimeFormat(undefined, { weekday: 'long' }).format(new Date()), start_time: '6:00 AM', end_time: '7:00 AM', capacity: '' });
 
   const handleSaveClass = async () => {
     try {
       if (editingClass && editingClass.id) {
         await schedule.update({ id: Number(editingClass.id), patch: {
-          title: draft.title, instructor: draft.instructor, start_time: draft.start_time, end_time: draft.end_time, capacity: draft.capacity ? Number(draft.capacity) : null,
+          title: draft.title,
+          instructor: draft.instructor,
+          date: draft.date,
+          day: draft.day,
+          start_time: draft.start_time,
+          end_time: draft.end_time,
+          capacity: draft.capacity ? Number(draft.capacity) : null,
         }});
       } else {
-        await schedule.add({ title: draft.title, instructor: draft.instructor, start_time: draft.start_time, end_time: draft.end_time, capacity: draft.capacity ? Number(draft.capacity) : null });
+        await schedule.add({
+          title: draft.title,
+          instructor: draft.instructor,
+          date: draft.date,
+          day: draft.day,
+          start_time: draft.start_time,
+          end_time: draft.end_time,
+          capacity: draft.capacity ? Number(draft.capacity) : null,
+        } as any);
       }
       showNotificationBanner('Saved!', 'success');
       setShowClassModal(false);
@@ -319,7 +333,7 @@ function AdminContent() {
     const grouped = useMemo(() => {
       const m = new Map<string, ScheduleRow[]>();
       (schedule.items ?? []).forEach(r => {
-        const day = r.start_time.slice(0,10);
+        const day = r.date;
         if (!m.has(day)) m.set(day, []);
         m.get(day)!.push(r);
       });
@@ -334,7 +348,7 @@ function AdminContent() {
             style={styles.addButton}
             onPress={() => {
               setEditingClass(null);
-              setDraft({ title: '', instructor: '', start_time: new Date().toISOString(), end_time: new Date(Date.now()+3600000).toISOString(), capacity: '' });
+              setDraft({ title: '', instructor: '', date: new Date().toISOString().slice(0,10), day: new Intl.DateTimeFormat(undefined, { weekday: 'long' }).format(new Date()), start_time: '6:00 AM', end_time: '7:00 AM', capacity: '' });
               setShowClassModal(true);
             }}
           >
@@ -354,7 +368,7 @@ function AdminContent() {
                 <View key={item.id} style={styles.classCard}>
                   <View style={styles.classInfo}>
                     <View style={styles.classHeader}>
-                      <Text style={styles.classTime}>{item.start_time.slice(11,16)} - {item.end_time.slice(11,16)}</Text>
+                      <Text style={styles.classTime}>{item.start_time} - {item.end_time}</Text>
                       <View style={styles.classType}>
                         <Text style={styles.classTypeText}>{item.title}</Text>
                       </View>
@@ -366,7 +380,7 @@ function AdminContent() {
                       style={styles.actionButton}
                       onPress={() => {
                         setEditingClass({ id: String(item.id), day: '', time: '', type: item.title as any, instructor: item.instructor, maxCapacity: item.capacity ?? 0, description: '', isRecurring: false, bookings: 0 });
-                        setDraft({ title: item.title ?? '', instructor: item.instructor ?? '', start_time: item.start_time, end_time: item.end_time, capacity: (item.capacity ?? '').toString() });
+                        setDraft({ title: item.title ?? '', instructor: item.instructor ?? '', date: item.date, day: item.day, start_time: item.start_time, end_time: item.end_time, capacity: (item.capacity ?? '').toString() });
                         setShowClassModal(true);
                       }}
                     >
@@ -726,12 +740,23 @@ function AdminContent() {
               <TextInput style={styles.textInput} value={draft.instructor} onChangeText={(t)=>setDraft({...draft, instructor: t})} placeholder="Joanna Nostdal" />
             </View>
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Start (ISO)</Text>
-              <TextInput style={styles.textInput} value={draft.start_time} autoCapitalize="none" onChangeText={(t)=>setDraft({...draft, start_time: t})} placeholder="2025-08-27T18:00:00" />
+              <Text style={styles.label}>Date (YYYY-MM-DD)</Text>
+              <TextInput style={styles.textInput} value={draft.date} autoCapitalize="none" onChangeText={(t)=>{
+                  const trimmed = t.trim();
+                  setDraft({
+                    ...draft,
+                    date: trimmed,
+                    day: /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? new Intl.DateTimeFormat(undefined, { weekday: 'long' }).format(new Date(trimmed)) : draft.day,
+                  });
+                }} placeholder="2025-08-27" />
             </View>
             <View style={styles.formGroup}>
-              <Text style={styles.label}>End (ISO)</Text>
-              <TextInput style={styles.textInput} value={draft.end_time} autoCapitalize="none" onChangeText={(t)=>setDraft({...draft, end_time: t})} placeholder="2025-08-27T19:00:00" />
+              <Text style={styles.label}>Start Time (e.g., 6:00 AM)</Text>
+              <TextInput style={styles.textInput} value={draft.start_time} autoCapitalize="none" onChangeText={(t)=>setDraft({...draft, start_time: t})} placeholder="6:00 PM" />
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>End Time (e.g., 7:00 PM)</Text>
+              <TextInput style={styles.textInput} value={draft.end_time} autoCapitalize="none" onChangeText={(t)=>setDraft({...draft, end_time: t})} placeholder="7:00 PM" />
             </View>
             <View style={styles.formGroup}>
               <Text style={styles.label}>Capacity</Text>

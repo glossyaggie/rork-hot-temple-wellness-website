@@ -7,46 +7,24 @@ import { useSchedule, ScheduleRow } from '@/hooks/useSchedule';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 
-function getDatePart(iso: string): string {
-  if (!iso) return '';
-  // Works for 'YYYY-MM-DDTHH:mm:ss' and 'YYYY-MM-DD HH:mm:ss'
-  const first10 = iso.slice(0, 10);
-  return first10;
+function fmtTimeLabel(raw: string): string {
+  return raw ?? '';
 }
 
-function getTimePart(iso: string): string {
-  if (!iso) return '';
-  const sepIndex = iso.indexOf('T') >= 0 ? iso.indexOf('T') : iso.indexOf(' ');
-  if (sepIndex < 0) return '';
-  const time = iso.slice(sepIndex + 1);
-  const hhmm = time.slice(0,5);
-  return hhmm;
-}
-
-function fmtTimeLocalString(iso: string): string {
-  const hhmm = getTimePart(iso);
-  if (!hhmm) return '';
-  const [hStr, mStr] = hhmm.split(':');
-  const h = Number(hStr);
-  const m = Number(mStr);
-  if (Number.isNaN(h) || Number.isNaN(m)) return hhmm;
-  const hours12 = ((h + 11) % 12) + 1;
-  const mm = m.toString().padStart(2, '0');
-  const ampm = h >= 12 ? 'PM' : 'AM';
-  return `${hours12}:${mm} ${ampm}`;
-}
-
-function durationMin(startIso: string, endIso: string): number {
-  const sDate = getDatePart(startIso);
-  const eDate = getDatePart(endIso);
-  const sTime = getTimePart(startIso);
-  const eTime = getTimePart(endIso);
-  if (!sDate || !eDate || !sTime || !eTime) return 0;
-  const makeLocal = (date: string, time: string) => new Date(`${date}T${time}:00`);
-  const s = makeLocal(sDate, sTime).getTime();
-  const e = makeLocal(eDate, eTime).getTime();
-  const diff = Math.max(0, e - s);
-  return Math.round(diff / 60000);
+function minutesBetween(start: string, end: string): number {
+  const toMin = (s: string) => {
+    const parts = s.trim().split(' ');
+    const t = parts[0] ?? '';
+    const ampm = (parts[1] ?? '').toUpperCase();
+    const hm = t.split(':');
+    const h = Number(hm[0] ?? 0);
+    const m = Number(hm[1] ?? 0);
+    let hh = h;
+    if (ampm === 'PM' && hh !== 12) hh += 12;
+    if (ampm === 'AM' && hh === 12) hh = 0;
+    return hh * 60 + m;
+  };
+  return toMin(end) - toMin(start);
 }
 
 function startOfWeekISO(date: Date): Date {
@@ -104,7 +82,15 @@ export default function ScheduleScreen() {
   const weekStart = useMemo(() => startOfWeekISO(selectedDate), [selectedDate]);
   const weekEnd = useMemo(() => endOfWeekISO(selectedDate), [selectedDate]);
 
-  const { items, isLoading, isError, refetch, add, update, remove, creating, updating } = useSchedule({});
+  const today = new Date();
+const yyyy = today.getFullYear();
+const mm = String(today.getMonth() + 1).padStart(2, '0');
+const dd = String(today.getDate()).padStart(2, '0');
+const from = `${yyyy}-${mm}-${dd}`;
+const toDate = new Date(today);
+toDate.setDate(today.getDate() + 14);
+const to = `${toDate.getFullYear()}-${String(toDate.getMonth() + 1).padStart(2, '0')}-${String(toDate.getDate()).padStart(2, '0')}`;
+const { items, isLoading, isError, refetch, add, update, remove, creating, updating } = useSchedule({ from, to });
 
   const [modalOpenId, setModalOpenId] = useState<number | null>(null);
   const [datePickerOpen, setDatePickerOpen] = useState<boolean>(false);
@@ -125,14 +111,14 @@ export default function ScheduleScreen() {
     if (selectedDayIndex === null) return items;
     const day = allDays[selectedDayIndex];
     const key = dateKey(day);
-    return items.filter(r => getDatePart(r.start_time) === key);
+    return items.filter(r => r.date === key);
   }, [items, selectedDayIndex, allDays]);
 
   const filteredByChips = useMemo(() => {
     let list = filteredByDay;
     if (selectedTitles.size) list = list.filter(r => r.title && selectedTitles.has(r.title));
     if (selectedInstructors.size) list = list.filter(r => r.instructor && selectedInstructors.has(r.instructor));
-    if (durationFilter) list = list.filter(r => durationMin(r.start_time, r.end_time) >= durationFilter);
+    if (durationFilter) list = list.filter(r => minutesBetween(r.start_time, r.end_time) >= durationFilter);
 
     return list.slice().sort((a, b) => {
       const at = a.start_time;
@@ -145,7 +131,7 @@ export default function ScheduleScreen() {
   const sections = useMemo(() => {
     const map = new Map<string, { title: string; data: ScheduleRow[] }>();
     filteredByChips.forEach(r => {
-      const key = getDatePart(r.start_time);
+      const key = r.date;
       const label = formatHeaderFromDateKey(key);
       if (!map.has(key)) map.set(key, { title: label, data: [] });
       map.get(key)?.data.push(r);
@@ -162,7 +148,7 @@ export default function ScheduleScreen() {
 
   const openCreate = () => {
     setModalOpenId(0);
-    setDraft({ title: '', instructor: '', start_time: new Date().toISOString(), end_time: new Date(Date.now() + 3600000).toISOString(), capacity: '' });
+    setDraft({ title: '', instructor: '', start_time: '6:00 AM', end_time: '7:00 AM', capacity: '' });
   };
 
   const openEdit = (id: number) => {
@@ -178,11 +164,14 @@ export default function ScheduleScreen() {
 
   const submit = async () => {
     try {
-      const payload = { title: draft.title, instructor: draft.instructor, start_time: draft.start_time, end_time: draft.end_time, capacity: draft.capacity ? Number(draft.capacity) : null };
+      // require date selection for create/edit
+      const selectedKey = selectedDayIndex !== null ? dateKey(allDays[selectedDayIndex]) : dateKey(selectedDate);
+      const dayName = new Intl.DateTimeFormat(undefined, { weekday: 'long' }).format(new Date(selectedKey));
+      const payload = { title: draft.title, instructor: draft.instructor, date: selectedKey, day: dayName, start_time: draft.start_time, end_time: draft.end_time, capacity: draft.capacity ? Number(draft.capacity) : null } as const;
       if (modalOpenId && modalOpenId !== 0) {
         await update({ id: modalOpenId, patch: payload });
       } else {
-        await add(payload);
+        await add(payload as any);
       }
       closeModal();
     } catch (e) {
@@ -370,7 +359,7 @@ export default function ScheduleScreen() {
           )}
           renderItem={({ item }) => {
             const c = item as ScheduleRow;
-            const dur = durationMin(c.start_time, c.end_time);
+            const dur = minutesBetween(c.start_time, c.end_time);
             return (
               <View style={styles.card} testID={`class-card-${c.id}`}>
                 <View style={styles.cardHeader}>
@@ -390,7 +379,7 @@ export default function ScheduleScreen() {
                 <View style={styles.metaRow}>
                   <View style={styles.metaItem}>
                     <Clock size={16} color={theme.colors.textSecondary} />
-                    <Text style={styles.metaText}>{fmtTimeLocalString(c.start_time)} - {fmtTimeLocalString(c.end_time)} • {dur} min</Text>
+                    <Text style={styles.metaText}>{fmtTimeLabel(c.start_time)} - {fmtTimeLabel(c.end_time)} • {dur} min</Text>
                   </View>
                   {c.capacity !== null && (
                     <View style={styles.metaItem}>
@@ -470,8 +459,8 @@ export default function ScheduleScreen() {
             <Text style={styles.modalTitle}>{modalOpenId === 0 ? 'Create Class' : 'Edit Class'}</Text>
             <TextInput placeholder="Title" value={draft.title} onChangeText={(t) => setDraft({ ...draft, title: t })} style={styles.input} testID="input-title" />
             <TextInput placeholder="Instructor" value={draft.instructor} onChangeText={(t) => setDraft({ ...draft, instructor: t })} style={styles.input} testID="input-instructor" />
-            <TextInput placeholder="Start ISO" value={draft.start_time} onChangeText={(t) => setDraft({ ...draft, start_time: t })} style={styles.input} autoCapitalize="none" testID="input-start" />
-            <TextInput placeholder="End ISO" value={draft.end_time} onChangeText={(t) => setDraft({ ...draft, end_time: t })} style={styles.input} autoCapitalize="none" testID="input-end" />
+            <TextInput placeholder="Start Time (e.g., 6:00 PM)" value={draft.start_time} onChangeText={(t) => setDraft({ ...draft, start_time: t })} style={styles.input} autoCapitalize="none" testID="input-start" />
+            <TextInput placeholder="End Time (e.g., 7:00 PM)" value={draft.end_time} onChangeText={(t) => setDraft({ ...draft, end_time: t })} style={styles.input} autoCapitalize="none" testID="input-end" />
             <TextInput placeholder="Capacity (optional)" value={draft.capacity} onChangeText={(t) => setDraft({ ...draft, capacity: t })} keyboardType="number-pad" style={styles.input} testID="input-capacity" />
             <View style={styles.modalActions}>
               <TouchableOpacity onPress={closeModal} style={[styles.modalBtn, styles.cancelBtn]} testID="cancel-modal"><Text style={styles.cancelText}>Cancel</Text></TouchableOpacity>

@@ -37,8 +37,14 @@ function fmtTimeLocalString(iso: string): string {
 }
 
 function durationMin(startIso: string, endIso: string): number {
-  const s = new Date(startIso).getTime();
-  const e = new Date(endIso).getTime();
+  const sDate = getDatePart(startIso);
+  const eDate = getDatePart(endIso);
+  const sTime = getTimePart(startIso);
+  const eTime = getTimePart(endIso);
+  if (!sDate || !eDate || !sTime || !eTime) return 0;
+  const makeLocal = (date: string, time: string) => new Date(`${date}T${time}:00`);
+  const s = makeLocal(sDate, sTime).getTime();
+  const e = makeLocal(eDate, eTime).getTime();
   const diff = Math.max(0, e - s);
   return Math.round(diff / 60000);
 }
@@ -90,8 +96,7 @@ export default function ScheduleScreen() {
 
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedDayIndex, setSelectedDayIndex] = useState<number | null>(null); // 0..6 or null for whole week
-  const [titleDropdownOpen, setTitleDropdownOpen] = useState<boolean>(false);
-  const [instructorDropdownOpen, setInstructorDropdownOpen] = useState<boolean>(false);
+  const [filtersOpen, setFiltersOpen] = useState<boolean>(false);
   const [selectedTitles, setSelectedTitles] = useState<Set<string>>(new Set<string>());
   const [selectedInstructors, setSelectedInstructors] = useState<Set<string>>(new Set<string>());
   const [durationFilter, setDurationFilter] = useState<number | null>(null); // minutes
@@ -247,72 +252,88 @@ export default function ScheduleScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => { setTitleDropdownOpen(v => !v); setInstructorDropdownOpen(false); }}
+            onPress={() => setFiltersOpen(true)}
             style={styles.pillBtn}
-            testID="btn-class-type"
+            testID="btn-open-filters"
           >
-            <Text style={styles.pillText}>{selectedTitles.size ? `${selectedTitles.size} Class${selectedTitles.size>1?'es':''}` : 'Class Type'}</Text>
+            <Text style={styles.pillText}>Filters</Text>
             <ChevronDown size={14} color={theme.colors.textSecondary} />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            onPress={() => { setInstructorDropdownOpen(v => !v); setTitleDropdownOpen(false); }}
-            style={styles.pillBtn}
-            testID="btn-instructor"
-          >
-            <Text style={styles.pillText}>{selectedInstructors.size ? `${selectedInstructors.size} Instructor${selectedInstructors.size>1?'s':''}` : 'Instructor'}</Text>
-            <ChevronDown size={14} color={theme.colors.textSecondary} />
-          </TouchableOpacity>
-
-          {[45, 60, 75, 90].map((m) => {
-            const active = durationFilter === m;
-            return (
-              <TouchableOpacity key={`d-${m}`} onPress={() => setDurationFilter(active ? null : m)} style={[styles.pillBtn, active && styles.pillActive]} testID={`btn-duration-${m}`}>
-                <Text style={[styles.pillText, active && styles.pillTextActive]}>{m}m+</Text>
-              </TouchableOpacity>
-            );
-          })}
+          {[...selectedTitles].slice(0, 3).map((t) => (
+            <View key={`at-${t}`} style={[styles.pillBtn, styles.pillActive]}>
+              <Text style={[styles.pillText, styles.pillTextActive]}>{t}</Text>
+            </View>
+          ))}
+          {[...selectedInstructors].slice(0, 2).map((i) => (
+            <View key={`ai-${i}`} style={[styles.pillBtn, styles.pillActive]}>
+              <Text style={[styles.pillText, styles.pillTextActive]}>{i}</Text>
+            </View>
+          ))}
+          {durationFilter ? (
+            <View style={[styles.pillBtn, styles.pillActive]}>
+              <Text style={[styles.pillText, styles.pillTextActive]}>{durationFilter}m+</Text>
+            </View>
+          ) : null}
         </ScrollView>
 
-        {titleDropdownOpen && (
-          <View style={styles.portal} pointerEvents="box-none">
-            <Pressable style={styles.portalBackdrop} onPress={() => setTitleDropdownOpen(false)} />
-            <View style={styles.portalCard} testID="dropdown-title">
-              <ScrollView style={{ maxHeight: 300 }}>
-                {titleOptions.map((t) => {
-                  const active = selectedTitles.has(t);
-                  return (
-                    <TouchableOpacity key={`t-${t}`} onPress={() => {
-                      const next = new Set(selectedTitles);
-                      if (active) next.delete(t); else next.add(t);
-                      setSelectedTitles(next);
-                    }} style={styles.dropdownItem} testID={`opt-title-${t}`}>
-                      <Text style={[styles.dropdownText, active && styles.dropdownTextActive]}>{t}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
-          </View>
-        )}
+        {filtersOpen && (
+          <View style={styles.bottomSheetOverlay}>
+            <Pressable style={styles.bottomSheetBackdrop} onPress={() => setFiltersOpen(false)} />
+            <View style={styles.bottomSheet} testID="filters-bottom-sheet">
+              <ScrollView contentContainerStyle={styles.bottomSheetContent}>
+                <Text style={styles.sheetSectionTitle}>Class Type</Text>
+                <View style={styles.sheetChipsRow}>
+                  {titleOptions.map((t) => {
+                    const active = selectedTitles.has(t);
+                    return (
+                      <TouchableOpacity key={`t-${t}`} onPress={() => {
+                        const next = new Set(selectedTitles);
+                        if (active) next.delete(t); else next.add(t);
+                        setSelectedTitles(next);
+                      }} style={[styles.sheetChip, active && styles.sheetChipActive]} testID={`sheet-title-${t}`}>
+                        <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{t}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
 
-        {instructorDropdownOpen && (
-          <View style={styles.portal} pointerEvents="box-none">
-            <Pressable style={styles.portalBackdrop} onPress={() => setInstructorDropdownOpen(false)} />
-            <View style={styles.portalCard} testID="dropdown-instructor">
-              <ScrollView style={{ maxHeight: 300 }}>
-                {instructorOptions.map((i) => {
-                  const active = selectedInstructors.has(i);
-                  return (
-                    <TouchableOpacity key={`i-${i}`} onPress={() => {
-                      const next = new Set(selectedInstructors);
-                      if (active) next.delete(i); else next.add(i);
-                      setSelectedInstructors(next);
-                    }} style={styles.dropdownItem} testID={`opt-instructor-${i}`}>
-                      <Text style={[styles.dropdownText, active && styles.dropdownTextActive]}>{i}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
+                <Text style={[styles.sheetSectionTitle, { marginTop: 12 }]}>Instructor</Text>
+                <View style={styles.sheetChipsRow}>
+                  {instructorOptions.map((i) => {
+                    const active = selectedInstructors.has(i);
+                    return (
+                      <TouchableOpacity key={`i-${i}`} onPress={() => {
+                        const next = new Set(selectedInstructors);
+                        if (active) next.delete(i); else next.add(i);
+                        setSelectedInstructors(next);
+                      }} style={[styles.sheetChip, active && styles.sheetChipActive]} testID={`sheet-instructor-${i}`}>
+                        <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{i}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <Text style={[styles.sheetSectionTitle, { marginTop: 12 }]}>Duration</Text>
+                <View style={styles.sheetChipsRow}>
+                  {[45,60,75,90].map((m) => {
+                    const active = durationFilter === m;
+                    return (
+                      <TouchableOpacity key={`d-${m}`} onPress={() => setDurationFilter(active ? null : m)} style={[styles.sheetChip, active && styles.sheetChipActive]} testID={`sheet-duration-${m}`}>
+                        <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{m}m+</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+
+                <View style={styles.sheetActions}>
+                  <TouchableOpacity onPress={resetFilters} style={[styles.sheetBtn, styles.sheetBtnSecondary]} testID="sheet-reset">
+                    <Text style={styles.sheetBtnSecondaryText}>Reset All</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setFiltersOpen(false)} style={[styles.sheetBtn, styles.sheetBtnPrimary]} testID="sheet-apply">
+                    <Text style={styles.sheetBtnPrimaryText}>Apply</Text>
+                  </TouchableOpacity>
+                </View>
               </ScrollView>
             </View>
           </View>
@@ -459,13 +480,13 @@ export default function ScheduleScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
-  header: { paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.md, backgroundColor: theme.colors.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: theme.colors.border },
+  header: { paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm, backgroundColor: theme.colors.surface, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: theme.colors.border },
   headerTitle: { fontSize: 20, fontWeight: '700', color: theme.colors.text },
   addBtn: { flexDirection: 'row', alignItems: 'center', backgroundColor: theme.colors.primary, paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm, borderRadius: theme.borderRadius.md, gap: 8 },
   addBtnText: { color: '#fff', fontWeight: '600' },
   iconCircle: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.surface },
   weekStrip: { borderBottomWidth: 1, borderBottomColor: theme.colors.border, backgroundColor: theme.colors.surface },
-  weekStripContent: { paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.sm, gap: theme.spacing.sm },
+  weekStripContent: { paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm, gap: theme.spacing.sm },
   dayChip: { width: 72, height: 96, borderRadius: 20, paddingVertical: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   dayChipUnselected: { backgroundColor: '#FFFFFF', borderColor: '#E5E7EB' },
   dayChipSelected: { backgroundColor: '#ff5a5f', borderColor: '#ff5a5f' },
@@ -474,18 +495,28 @@ const styles = StyleSheet.create({
   dayChipLabelSelected: { color: '#FFFFFF' },
   dayChipSubSelected: { color: '#FFFFFF' },
   filters: { backgroundColor: theme.colors.surface },
-  filtersContent: { paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.sm, gap: theme.spacing.sm, alignItems: 'center' },
+  filtersContent: { paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm, gap: theme.spacing.sm, alignItems: 'center' },
   pillBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.background },
   pillReset: { backgroundColor: theme.colors.surface },
   pillActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
   pillText: { color: theme.colors.textSecondary, fontSize: 12 },
   pillTextActive: { color: '#fff', fontWeight: '700' },
-  portal: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, elevation: 1000, justifyContent: 'flex-start' },
-  portalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.2)' },
-  portalCard: { marginTop: 8, marginHorizontal: theme.spacing.lg, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.borderRadius.md, paddingVertical: 6, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12, elevation: 6 },
-  dropdownItem: { paddingVertical: 10, paddingHorizontal: 12 },
-  dropdownText: { color: theme.colors.text },
-  dropdownTextActive: { color: theme.colors.primary, fontWeight: '700' },
+  bottomSheetOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, elevation: 1000 },
+  bottomSheetBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.2)' },
+  bottomSheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: theme.colors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, borderWidth: 1, borderColor: theme.colors.border, paddingBottom: 16 },
+  bottomSheetContent: { paddingHorizontal: theme.spacing.lg, paddingTop: 12, paddingBottom: 8 },
+  sheetSectionTitle: { fontSize: 14, fontWeight: '700', color: theme.colors.text, marginBottom: 8 },
+  sheetChipsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  sheetChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.background },
+  sheetChipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  sheetChipText: { color: theme.colors.textSecondary, fontSize: 12 },
+  sheetChipTextActive: { color: '#fff', fontWeight: '700' },
+  sheetActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 16 },
+  sheetBtn: { flex: 1, paddingVertical: 12, borderRadius: 12, alignItems: 'center' },
+  sheetBtnSecondary: { marginRight: 8, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface },
+  sheetBtnPrimary: { marginLeft: 8, backgroundColor: theme.colors.primary },
+  sheetBtnSecondaryText: { color: theme.colors.text },
+  sheetBtnPrimaryText: { color: '#fff', fontWeight: '700' },
   loading: { padding: theme.spacing.lg, alignItems: 'center' },
   loadingText: { marginTop: 8, color: theme.colors.textSecondary, marginBottom: theme.spacing.md },
   skeletonList: { width: '100%', paddingHorizontal: theme.spacing.lg, gap: theme.spacing.md },
@@ -494,7 +525,7 @@ const styles = StyleSheet.create({
   errorText: { color: theme.colors.error, marginBottom: 8 },
   retryBtn: { paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.sm, borderRadius: theme.borderRadius.sm, borderWidth: 1, borderColor: theme.colors.border },
   retryText: { color: theme.colors.text },
-  listContent: { padding: theme.spacing.lg, gap: theme.spacing.md },
+  listContent: { padding: theme.spacing.md, gap: theme.spacing.md },
   sectionHeader: { backgroundColor: theme.colors.surface, paddingVertical: 6, paddingHorizontal: theme.spacing.sm, borderRadius: theme.borderRadius.sm, marginBottom: 6 },
   sectionHeaderText: { color: theme.colors.textSecondary, fontWeight: '700' },
   card: { backgroundColor: theme.colors.surface, borderRadius: theme.borderRadius.md, padding: theme.spacing.md, borderWidth: 1, borderColor: theme.colors.border, marginBottom: theme.spacing.md },

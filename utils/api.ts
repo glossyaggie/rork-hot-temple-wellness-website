@@ -427,7 +427,13 @@ export const openCheckout = async (checkoutUrl: string): Promise<void> => {
 
 export const confirmPayment = async (sessionId: string): Promise<{ ok: boolean }> => {
   try {
-    const { data, error } = await supabase.functions.invoke('confirm-payment', { body: { sessionId } });
+    const { data: { user } } = await supabase.auth.getUser();
+    const userId = user?.id ?? null;
+    if (!userId) {
+      console.warn('confirmPayment: No authenticated user');
+      return { ok: false };
+    }
+    const { data, error } = await supabase.functions.invoke('confirm-payment', { body: { sessionId, userId } });
     if (error) throw error as any;
     return { ok: Boolean((data as any)?.ok ?? true) };
   } catch (e) {

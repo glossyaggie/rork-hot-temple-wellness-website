@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
 export type Role = 'member' | 'instructor' | 'admin';
@@ -19,35 +19,44 @@ export function useAuth() {
   useEffect(() => {
     let mounted = true;
 
-    const withTimeout = async <T,>(p: Promise<T>, ms: number, label: string): Promise<T> => {
-      return new Promise<T>((resolve, reject) => {
-        const t = setTimeout(() => {
-          console.warn(`⏱️ ${label} timed out after ${ms}ms`);
-          reject(new Error(`${label} timeout`));
-        }, ms);
-        p.then((v) => { clearTimeout(t); resolve(v); }).catch((e) => { clearTimeout(t); reject(e); });
-      });
+    const startedRef = { current: false };
+
+    const getSessionWithTimeout = async () => {
+      try {
+        const p = supabase.auth.getSession();
+        const timeout = new Promise<Awaited<ReturnType<typeof supabase.auth.getSession>>>((resolve) => {
+          const t = setTimeout(() => {
+            console.warn('⏱️ getSession timed out after 12s — proceeding without a session');
+            resolve({ data: { session: null }, error: null } as any);
+          }, 12000);
+          p.finally(() => clearTimeout(t));
+        });
+        return await Promise.race([p, timeout]);
+      } catch (e) {
+        console.error('❌ getSession exception:', e);
+        return { data: { session: null }, error: null } as any;
+      }
     };
 
     const bootstrap = async () => {
+      if (startedRef.current) return;
+      startedRef.current = true;
       try {
         console.log('🔄 Starting auth bootstrap...');
-        const { data: { session }, error } = await withTimeout(supabase.auth.getSession(), 10000, 'getSession');
-
-        if (error) {
-          console.error('❌ Auth session error:', error);
-          if (mounted) setLoading(false);
-          return;
-        }
+        const { data: { session }, error } = await getSessionWithTimeout();
 
         if (!mounted) return;
+
+        if (error) {
+          console.warn('⚠️ Auth session error, continuing as logged out:', error);
+        }
 
         console.log('✅ Session loaded:', session ? 'User logged in' : 'No session');
         setSession(session);
 
         if (session) {
           try {
-            await withTimeout(loadRole(session.user.id), 8000, 'loadRole');
+            await loadRole(session.user.id);
           } catch (e) {
             console.warn('⚠️ loadRole failed, defaulting to member');
             setRole('member');

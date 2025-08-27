@@ -357,7 +357,7 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
           ) : (
             <View style={styles.bottomSheetOverlay}>
               <Pressable style={styles.bottomSheetBackdrop} onPress={() => setFiltersOpen(false)} />
-              <View style={[styles.bottomSheet, { maxHeight: '80%', paddingBottom: 16 + insets.bottom }]} testID="filters-bottom-sheet">
+              <View style={[styles.bottomSheet, { maxHeight: '92%', paddingBottom: 16 + insets.bottom }]} testID="filters-bottom-sheet">
                 <ScrollView contentContainerStyle={styles.bottomSheetContent}>
                   <Text style={styles.sheetSectionTitle}>Class Type</Text>
                   <View style={styles.sheetChipsRow}>
@@ -610,7 +610,7 @@ const styles = StyleSheet.create({
   sheetBtnPrimaryText: { color: '#fff', fontWeight: '700' },
   webModalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, elevation: 1000, alignItems: 'center', justifyContent: 'center' },
   webModalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' },
-  webModalCard: { width: '96%', maxWidth: 840, maxHeight: '86%', backgroundColor: theme.colors.surface, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.border, overflow: 'hidden' },
+  webModalCard: { width: '96%', maxWidth: 840, maxHeight: '96%', backgroundColor: theme.colors.surface, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.border, overflow: 'hidden' },
   webModalContent: { paddingHorizontal: theme.spacing.xl + 4, paddingTop: theme.spacing.xl, paddingBottom: theme.spacing.xl },
   webModalTitle: { fontSize: 20, fontWeight: '800', color: theme.colors.text, marginBottom: 14 },
   webModalActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 },

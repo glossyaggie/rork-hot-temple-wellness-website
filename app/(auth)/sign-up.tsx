@@ -3,6 +3,7 @@ import { View, TextInput, StyleSheet, Text, Alert, SafeAreaView, TouchableOpacit
 import * as LinkingExpo from 'expo-linking';
 import { supabase } from '../../lib/supabase';
 import { router } from 'expo-router';
+import WaiverModal, { SignatureData } from '../../components/WaiverModal';
 
 export default function SignUp() {
   const [fullName, setFullName] = useState<string>('');
@@ -12,6 +13,8 @@ export default function SignUp() {
   const [consentMarketing, setConsentMarketing] = useState<boolean>(false);
   const [acceptTerms, setAcceptTerms] = useState<boolean>(false);
   const [signWaiver, setSignWaiver] = useState<boolean>(false);
+  const [waiverVisible, setWaiverVisible] = useState<boolean>(false);
+  const [waiverSig, setWaiverSig] = useState<SignatureData | null>(null);
   const [busy, setBusy] = useState<boolean>(false);
   const [needsEmailConfirm, setNeedsEmailConfirm] = useState<boolean>(false);
   const [resentBusy, setResentBusy] = useState<boolean>(false);
@@ -19,6 +22,26 @@ export default function SignUp() {
   const canSubmit = useMemo<boolean>(() => {
     return Boolean(fullName && phone && email && password && acceptTerms && signWaiver && !busy);
   }, [fullName, phone, email, password, acceptTerms, signWaiver, busy]);
+
+  const svgFromSignature = (sig: SignatureData | null): string | null => {
+    try {
+      if (!sig) return null;
+      const { width, height, strokes } = sig;
+      const pathD = strokes
+        .map((s) =>
+          s.points
+            .map((p, i) => (i === 0 ? `M ${p.x.toFixed(1)} ${p.y.toFixed(1)}` : `L ${p.x.toFixed(1)} ${p.y.toFixed(1)}`))
+            .join(' ')
+        )
+        .join(' ');
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"><rect width="100%" height="100%" fill="#ffffff"/><path d="${pathD}" fill="none" stroke="#111111" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+      const encoded = encodeURIComponent(svg);
+      return `data:image/svg+xml;utf8,${encoded}`;
+    } catch (e) {
+      console.warn('Signature encode error', e);
+      return null;
+    }
+  };
 
   const onSignUp = async () => {
     try {
@@ -41,6 +64,7 @@ export default function SignUp() {
 
       if (userId) {
         try {
+          const waiverUrl = signWaiver ? svgFromSignature(waiverSig) : null;
           const { error: profileErr } = await supabase
             .from('profiles')
             .upsert(
@@ -52,7 +76,8 @@ export default function SignUp() {
                   consent_marketing: consentMarketing,
                   terms_version: '1.0',
                   terms_accepted_at: new Date().toISOString(),
-                  waiver_signed_at: new Date().toISOString(),
+                  waiver_signed_at: signWaiver ? new Date().toISOString() : null,
+                  waiver_signature_url: waiverUrl,
                 },
               ],
               { onConflict: 'id' }
@@ -174,10 +199,10 @@ export default function SignUp() {
               <TouchableOpacity
                 testID="signup-waiver"
                 style={styles.checkbox}
-                onPress={() => setSignWaiver((v) => !v)}
+                onPress={() => setWaiverVisible(true)}
               >
                 <Text style={styles.checkboxIcon}>{signWaiver ? '☑' : '☐'}</Text>
-                <Text style={styles.checkboxText}>I have signed the waiver</Text>
+                <Text style={styles.checkboxText}>{signWaiver ? 'Waiver signed' : 'Read & Sign Waiver'}</Text>
               </TouchableOpacity>
             </View>
 
@@ -227,6 +252,15 @@ export default function SignUp() {
         >
           <Text style={styles.backButtonText}>← Back</Text>
         </TouchableOpacity>
+        <WaiverModal
+          visible={waiverVisible}
+          onClose={() => setWaiverVisible(false)}
+          onSigned={(sig) => {
+            setWaiverSig(sig);
+            setSignWaiver(true);
+            setWaiverVisible(false);
+          }}
+        />
       </ScrollView>
     </SafeAreaView>
   );

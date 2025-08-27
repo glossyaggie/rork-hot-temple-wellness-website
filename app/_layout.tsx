@@ -3,6 +3,7 @@ import { useAuth } from '../hooks/useAuth';
 import { View, ActivityIndicator, Text } from 'react-native';
 import { BookingsProvider } from '../hooks/useBookings';
 import { HabitTrackerProvider } from '../hooks/useHabitTracker';
+import { NotificationProvider } from '../hooks/useNotifications';
 
 export default function RootLayout() {
   const { session, loading } = useAuth();
@@ -19,18 +20,20 @@ export default function RootLayout() {
   }
 
   return (
-    <BookingsProvider>
-      <HabitTrackerProvider>
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        </Stack>
-        {!session ? (
-          <Redirect href="/(auth)/welcome" />
-        ) : (
-          <Redirect href="/(tabs)" />
-        )}
-      </HabitTrackerProvider>
-    </BookingsProvider>
+    <NotificationProvider>
+      <BookingsProvider>
+        <HabitTrackerProvider>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+          </Stack>
+          {!session ? (
+            <Redirect href="/(auth)/welcome" />
+          ) : (
+            <Redirect href="/(tabs)" />
+          )}
+        </HabitTrackerProvider>
+      </BookingsProvider>
+    </NotificationProvider>
   );
 }

@@ -6,6 +6,27 @@ import * as Notifications from 'expo-notifications';
 import { Notification, MarketingCampaign, Contact, SMSMessage } from '@/types';
 import { useAuth } from './useAuth';
 
+interface NotificationContextValue {
+  notifications: Notification[];
+  campaigns: MarketingCampaign[];
+  contacts: Contact[];
+  smsMessages: SMSMessage[];
+  isLoading: boolean;
+  sendNotification: (args: {
+    title: string;
+    message: string;
+    type: 'class_reminder' | 'class_cancelled' | 'promotion' | 'general';
+    channels: ('push' | 'email' | 'sms')[];
+    targetUsers?: string[];
+    scheduledFor?: string;
+  }) => Promise<{ success: boolean; message: string }>;
+  createCampaign: (campaignData: Omit<MarketingCampaign, 'id' | 'createdAt' | 'sent'>) => Promise<{ success: boolean; campaign?: MarketingCampaign; message?: string }>;
+  importContacts: (csvData: string) => Promise<{ success: boolean; imported: number; message: string }>;
+  getNotificationAnalytics: () => { totalSent: number; thisWeek: number; pending: number; byChannel: Record<string, number> };
+  getSmsStats: () => { total: number; delivered: number; failed: number; totalCost: number; deliveryRate: number };
+  getRecentNotifications: () => Notification[];
+}
+
 // Configure notifications
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -17,13 +38,13 @@ Notifications.setNotificationHandler({
   }),
 });
 
-export const [NotificationProvider, useNotifications] = createContextHook(() => {
+export const [NotificationProvider, useNotificationsContext] = createContextHook<NotificationContextValue>(() => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [campaigns, setCampaigns] = useState<MarketingCampaign[]>([]);
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [smsMessages, setSmsMessages] = useState<SMSMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const { user } = useAuth();
+  const { session } = useAuth();
 
   const loadNotifications = useCallback(async () => {
     try {
@@ -181,7 +202,7 @@ export const [NotificationProvider, useNotifications] = createContextHook(() => 
         deliveredCount: 0,
         openedCount: 0,
         clickedCount: 0,
-        sentBy: user?.id || 'system',
+        sentBy: session?.user?.id || 'system',
         createdAt: new Date().toISOString(),
       };
 
@@ -242,7 +263,7 @@ export const [NotificationProvider, useNotifications] = createContextHook(() => 
       console.error('Error sending notification:', error);
       return { success: false, message: 'Failed to send notification' };
     }
-  }, [notifications, contacts, smsMessages, saveNotifications, saveSmsMessages, user?.id]);
+  }, [notifications, contacts, smsMessages, saveNotifications, saveSmsMessages, session?.user?.id]);
 
   const getNotificationAnalytics = useCallback(() => {
     const now = new Date();
@@ -367,7 +388,7 @@ export const [NotificationProvider, useNotifications] = createContextHook(() => 
       .slice(0, 10);
   }, [notifications]);
 
-  return useMemo(() => ({
+  return useMemo<NotificationContextValue>(() => ({
     notifications,
     campaigns,
     contacts,
@@ -381,3 +402,20 @@ export const [NotificationProvider, useNotifications] = createContextHook(() => 
     getRecentNotifications,
   }), [notifications, campaigns, contacts, smsMessages, isLoading, sendNotification, createCampaign, importContacts, getNotificationAnalytics, getSmsStats, getRecentNotifications]);
 });
+
+export function useNotifications(): NotificationContextValue {
+  const ctx = (useNotificationsContext as unknown as () => NotificationContextValue | undefined)();
+  return ctx ?? {
+    notifications: [],
+    campaigns: [],
+    contacts: [],
+    smsMessages: [],
+    isLoading: false,
+    sendNotification: async () => ({ success: false, message: 'Notifications unavailable' }),
+    createCampaign: async () => ({ success: false, message: 'Failed to create campaign' }),
+    importContacts: async () => ({ success: false, imported: 0, message: 'Failed to import contacts' }),
+    getNotificationAnalytics: () => ({ totalSent: 0, thisWeek: 0, pending: 0, byChannel: { push: 0, email: 0, sms: 0 } }),
+    getSmsStats: () => ({ total: 0, delivered: 0, failed: 0, totalCost: 0, deliveryRate: 0 }),
+    getRecentNotifications: () => [],
+  };
+}

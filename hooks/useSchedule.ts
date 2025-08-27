@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -11,17 +11,41 @@ export interface ScheduleRow {
   capacity: number | null;
 }
 
-async function fetchSchedule(): Promise<ScheduleRow[]> {
-  console.log('[useSchedule] fetchSchedule called');
-  const { data, error } = await supabase
+export interface ScheduleQueryParams {
+  startIso?: string;
+  endIso?: string;
+  titles?: string[];
+  instructors?: string[];
+  hidePast?: boolean;
+}
+
+async function fetchSchedule(params: ScheduleQueryParams): Promise<ScheduleRow[]> {
+  console.log('[useSchedule] fetchSchedule called', params);
+  let q = supabase
     .from('Schedule')
-    .select('id, title, instructor, start_time, end_time, capacity')
-    .order('start_time', { ascending: true });
+    .select('id, title, instructor, start_time, end_time, capacity');
+
+  if (params.startIso) q = q.gte('start_time', params.startIso);
+  if (params.endIso) q = q.lt('start_time', params.endIso);
+  if (params.titles && params.titles.length > 0) q = q.in('title', params.titles);
+  if (params.instructors && params.instructors.length > 0) q = q.in('instructor', params.instructors);
+
+  // Primary sort by start_time ASC, then title ASC for stability
+  q = q.order('start_time', { ascending: true }).order('title', { ascending: true });
+
+  const { data, error } = await q;
   if (error) {
     console.error('[useSchedule] fetchSchedule error', error);
     throw error;
   }
-  return data ?? [];
+  let rows = (data ?? []) as ScheduleRow[];
+
+  if (params.hidePast) {
+    const now = Date.now();
+    rows = rows.filter(r => new Date(r.start_time).getTime() >= now);
+  }
+
+  return rows;
 }
 
 async function insertSchedule(row: Omit<ScheduleRow, 'id'>): Promise<ScheduleRow> {
@@ -56,13 +80,13 @@ async function deleteSchedule(id: number): Promise<void> {
   if (error) throw error;
 }
 
-export function useSchedule() {
+export function useSchedule(params: ScheduleQueryParams = {}) {
   const qc = useQueryClient();
   const [search, setSearch] = useState<string>('');
 
   const query = useQuery({
-    queryKey: ['schedule'],
-    queryFn: fetchSchedule,
+    queryKey: ['schedule', params],
+    queryFn: () => fetchSchedule(params),
   });
 
   const addMutation = useMutation({
@@ -96,6 +120,18 @@ export function useSchedule() {
     );
   }, [query.data, search]);
 
+  const distinctTitles = useMemo(() => {
+    const set = new Set<string>();
+    (query.data ?? []).forEach(r => { if (r.title) set.add(r.title); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [query.data]);
+
+  const distinctInstructors = useMemo(() => {
+    const set = new Set<string>();
+    (query.data ?? []).forEach(r => { if (r.instructor) set.add(r.instructor); });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [query.data]);
+
   return {
     ...query,
     items: filtered,
@@ -108,5 +144,7 @@ export function useSchedule() {
     creating: addMutation.isPending,
     update: updateMutation.mutateAsync,
     remove: deleteMutation.mutateAsync,
+    distinctTitles,
+    distinctInstructors,
   };
 }

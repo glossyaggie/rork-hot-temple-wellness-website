@@ -1,19 +1,24 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TextInput, SectionList } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TextInput, SectionList, Pressable, Platform } from 'react-native';
 import { Clock, Users, Pencil, Plus, Trash2, Calendar, RotateCcw, ChevronDown } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useSchedule, ScheduleRow } from '@/hooks/useSchedule';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 
 function getDatePart(iso: string): string {
-  const tIndex = iso.indexOf('T');
-  return tIndex > 0 ? iso.slice(0, tIndex) : iso;
+  if (!iso) return '';
+  // Works for 'YYYY-MM-DDTHH:mm:ss' and 'YYYY-MM-DD HH:mm:ss'
+  const first10 = iso.slice(0, 10);
+  return first10;
 }
 
 function getTimePart(iso: string): string {
-  const tIndex = iso.indexOf('T');
-  if (tIndex < 0) return '';
-  const time = iso.slice(tIndex + 1);
+  if (!iso) return '';
+  const sepIndex = iso.indexOf('T') >= 0 ? iso.indexOf('T') : iso.indexOf(' ');
+  if (sepIndex < 0) return '';
+  const time = iso.slice(sepIndex + 1);
   const hhmm = time.slice(0,5);
   return hhmm;
 }
@@ -81,6 +86,7 @@ function formatHeaderFromDateKey(key: string): string {
 export default function ScheduleScreen() {
   const { role } = useAuth();
   const isAdmin = role === 'admin';
+  const insets = useSafeAreaInsets();
 
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [selectedDayIndex, setSelectedDayIndex] = useState<number | null>(null); // 0..6 or null for whole week
@@ -190,7 +196,8 @@ export default function ScheduleScreen() {
   const instructorOptions = useMemo(() => Array.from(new Set(items.map(i => i.instructor).filter(Boolean))).sort((a, b) => a.localeCompare(b)), [items]);
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView edges={['top']} style={[styles.container, { paddingTop: insets.top + 8 }] }>
+      <StatusBar style={Platform.OS === 'ios' ? 'light' : 'light'} />
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Live Schedule</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -219,10 +226,10 @@ export default function ScheduleScreen() {
           const label1 = new Intl.DateTimeFormat(undefined, { weekday: 'short' }).format(d);
           const label2 = new Intl.DateTimeFormat(undefined, { day: '2-digit' }).format(d);
           return (
-            <TouchableOpacity key={idx} style={[styles.dayPill, isSelected && styles.dayPillSelected]} onPress={() => setSelectedDayIndex(idx)} testID={`day-${idx}`}>
-              <Text style={[styles.dayPillText, isSelected && styles.dayPillTextSelected]}>{label1}</Text>
-              <Text style={[styles.dayPillSub, isSelected && styles.dayPillTextSelected]}>{label2}</Text>
-            </TouchableOpacity>
+            <Pressable key={idx} onPress={() => setSelectedDayIndex(idx)} testID={`day-${idx}`} style={[styles.dayChip, isSelected ? styles.dayChipSelected : styles.dayChipUnselected]}>
+              <Text style={[styles.dayChipLabel, isSelected && styles.dayChipLabelSelected]}>{label1}</Text>
+              <Text style={[styles.dayChipSub, isSelected && styles.dayChipSubSelected]}>{label2}</Text>
+            </Pressable>
           );
         })}
       </ScrollView>
@@ -268,40 +275,46 @@ export default function ScheduleScreen() {
         </ScrollView>
 
         {titleDropdownOpen && (
-          <View style={styles.dropdown} testID="dropdown-title">
-            <ScrollView style={{ maxHeight: 220 }}>
-              {titleOptions.map((t) => {
-                const active = selectedTitles.has(t);
-                return (
-                  <TouchableOpacity key={`t-${t}`} onPress={() => {
-                    const next = new Set(selectedTitles);
-                    if (active) next.delete(t); else next.add(t);
-                    setSelectedTitles(next);
-                  }} style={styles.dropdownItem} testID={`opt-title-${t}`}>
-                    <Text style={[styles.dropdownText, active && styles.dropdownTextActive]}>{t}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+          <View style={styles.portal} pointerEvents="box-none">
+            <Pressable style={styles.portalBackdrop} onPress={() => setTitleDropdownOpen(false)} />
+            <View style={styles.portalCard} testID="dropdown-title">
+              <ScrollView style={{ maxHeight: 300 }}>
+                {titleOptions.map((t) => {
+                  const active = selectedTitles.has(t);
+                  return (
+                    <TouchableOpacity key={`t-${t}`} onPress={() => {
+                      const next = new Set(selectedTitles);
+                      if (active) next.delete(t); else next.add(t);
+                      setSelectedTitles(next);
+                    }} style={styles.dropdownItem} testID={`opt-title-${t}`}>
+                      <Text style={[styles.dropdownText, active && styles.dropdownTextActive]}>{t}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
           </View>
         )}
 
         {instructorDropdownOpen && (
-          <View style={styles.dropdown} testID="dropdown-instructor">
-            <ScrollView style={{ maxHeight: 220 }}>
-              {instructorOptions.map((i) => {
-                const active = selectedInstructors.has(i);
-                return (
-                  <TouchableOpacity key={`i-${i}`} onPress={() => {
-                    const next = new Set(selectedInstructors);
-                    if (active) next.delete(i); else next.add(i);
-                    setSelectedInstructors(next);
-                  }} style={styles.dropdownItem} testID={`opt-instructor-${i}`}>
-                    <Text style={[styles.dropdownText, active && styles.dropdownTextActive]}>{i}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
+          <View style={styles.portal} pointerEvents="box-none">
+            <Pressable style={styles.portalBackdrop} onPress={() => setInstructorDropdownOpen(false)} />
+            <View style={styles.portalCard} testID="dropdown-instructor">
+              <ScrollView style={{ maxHeight: 300 }}>
+                {instructorOptions.map((i) => {
+                  const active = selectedInstructors.has(i);
+                  return (
+                    <TouchableOpacity key={`i-${i}`} onPress={() => {
+                      const next = new Set(selectedInstructors);
+                      if (active) next.delete(i); else next.add(i);
+                      setSelectedInstructors(next);
+                    }} style={styles.dropdownItem} testID={`opt-instructor-${i}`}>
+                      <Text style={[styles.dropdownText, active && styles.dropdownTextActive]}>{i}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
           </View>
         )}
       </View>
@@ -440,7 +453,7 @@ export default function ScheduleScreen() {
           </View>
         </View>
       )}
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -453,11 +466,13 @@ const styles = StyleSheet.create({
   iconCircle: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: theme.colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.colors.surface },
   weekStrip: { borderBottomWidth: 1, borderBottomColor: theme.colors.border, backgroundColor: theme.colors.surface },
   weekStripContent: { paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.sm, gap: theme.spacing.sm },
-  dayPill: { width: 56, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.border, paddingVertical: 8, alignItems: 'center', backgroundColor: theme.colors.background },
-  dayPillSelected: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
-  dayPillText: { color: theme.colors.text, fontWeight: '600' },
-  dayPillSub: { color: theme.colors.textSecondary, fontSize: 12 },
-  dayPillTextSelected: { color: '#fff' },
+  dayChip: { width: 72, height: 96, borderRadius: 20, paddingVertical: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
+  dayChipUnselected: { backgroundColor: '#FFFFFF', borderColor: '#E5E7EB' },
+  dayChipSelected: { backgroundColor: '#ff5a5f', borderColor: '#ff5a5f' },
+  dayChipLabel: { fontSize: 13, fontWeight: '600', color: '#111827' },
+  dayChipSub: { fontSize: 12, color: '#6B7280', marginTop: 4 },
+  dayChipLabelSelected: { color: '#FFFFFF' },
+  dayChipSubSelected: { color: '#FFFFFF' },
   filters: { backgroundColor: theme.colors.surface },
   filtersContent: { paddingHorizontal: theme.spacing.lg, paddingVertical: theme.spacing.sm, gap: theme.spacing.sm, alignItems: 'center' },
   pillBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.background },
@@ -465,7 +480,9 @@ const styles = StyleSheet.create({
   pillActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
   pillText: { color: theme.colors.textSecondary, fontSize: 12 },
   pillTextActive: { color: '#fff', fontWeight: '700' },
-  dropdown: { position: 'absolute', left: theme.spacing.lg, right: theme.spacing.lg, top: 44, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.borderRadius.md, paddingVertical: 6, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 8, elevation: 2 },
+  portal: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, elevation: 1000, justifyContent: 'flex-start' },
+  portalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.2)' },
+  portalCard: { marginTop: 8, marginHorizontal: theme.spacing.lg, backgroundColor: theme.colors.surface, borderWidth: 1, borderColor: theme.colors.border, borderRadius: theme.borderRadius.md, paddingVertical: 6, shadowColor: '#000', shadowOpacity: 0.15, shadowRadius: 12, elevation: 6 },
   dropdownItem: { paddingVertical: 10, paddingHorizontal: 12 },
   dropdownText: { color: theme.colors.text },
   dropdownTextActive: { color: theme.colors.primary, fontWeight: '700' },

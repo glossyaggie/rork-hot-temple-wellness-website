@@ -260,6 +260,7 @@ export default function SignUp() {
             setSignWaiver(true);
             setWaiverVisible(false);
           }}
+          waiverUrl="https://ujenpxsmooeineiznjvx.supabase.co/storage/v1/object/sign/waivers/hot_yoga_waiver_simple.pdf?token=eyJraWQiOiJzdG9yYWdlLXVybC1zaWduaW5nLWtleV9iMTZiMjgwNy1iOGE0LTQ0ZWQtOTIzYS1mNDI3MGMwNmI5YWQiLCJhbGciOiJIUzI1NiJ9.eyJ1cmwiOiJ3YWl2ZXJzL2hvdF95b2dhX3dhaXZlcl9zaW1wbGUucGRmIiwiaWF0IjoxNzU2MjYzOTUxLCJleHAiOjE3ODc3OTk5NTF9.O0w6IzbaV39cnOeWbYhla8vpEjF0XZ_wgfrVei26DMI"
         />
       </ScrollView>
     </SafeAreaView>

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { Modal, View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView } from 'react-native';
+import { Modal, View, Text, StyleSheet, TouchableOpacity, Dimensions, ScrollView, Linking } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { PanResponder, GestureResponderEvent, PanResponderGestureState } from 'react-native';
 
@@ -66,9 +66,10 @@ export type WaiverModalProps = {
   onSigned: (data: SignatureData) => void;
   waiverTitle?: string;
   waiverText?: string;
+  waiverUrl?: string;
 };
 
-export default function WaiverModal({ visible, onClose, onSigned, waiverTitle = 'Participant Waiver & Release', waiverText = DEFAULT_WAIVER }: WaiverModalProps) {
+export default function WaiverModal({ visible, onClose, onSigned, waiverTitle = 'Participant Waiver & Release', waiverText = DEFAULT_WAIVER, waiverUrl }: WaiverModalProps) {
   const { width } = Dimensions.get('window');
   const padWidth = Math.min(width - 32, 800);
   const padHeight = 220;
@@ -91,7 +92,29 @@ export default function WaiverModal({ visible, onClose, onSigned, waiverTitle = 
           }}
           scrollEventThrottle={16}
         >
-          <Text style={styles.waiverText}>{waiverText}</Text>
+          {waiverUrl ? (
+            <>
+              <Text style={styles.waiverText}>
+                Please review the official waiver document. Tap the button below to open the PDF. After reviewing, return here to continue and sign.
+              </Text>
+              <TouchableOpacity
+                testID="waiver-open-pdf"
+                style={styles.secondaryBtn}
+                onPress={async () => {
+                  try {
+                    await Linking.openURL(waiverUrl);
+                    setScrolledToEnd(true);
+                  } catch (err) {
+                    console.warn('Open PDF failed', err);
+                  }
+                }}
+              >
+                <Text style={styles.secondaryText}>Open Waiver (PDF)</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <Text style={styles.waiverText}>{waiverText}</Text>
+          )}
         </ScrollView>
 
         {!signing ? (

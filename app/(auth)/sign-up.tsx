@@ -1,49 +1,97 @@
-import { useState } from 'react';
-import { View, TextInput, StyleSheet, Text, Alert, SafeAreaView, TouchableOpacity, ScrollView } from 'react-native';
+import { useState, useMemo } from 'react';
+import { View, TextInput, StyleSheet, Text, Alert, SafeAreaView, TouchableOpacity, ScrollView, Linking, Platform } from 'react-native';
 import { supabase } from '../../lib/supabase';
 import { router } from 'expo-router';
 
 export default function SignUp() {
-  const [fullName, setFullName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [consentMarketing, setConsentMarketing] = useState(false);
-  const [acceptTerms, setAcceptTerms] = useState(false);
-  const [signWaiver, setSignWaiver] = useState(false);
-  const [busy, setBusy] = useState(false);
+  const [fullName, setFullName] = useState<string>('');
+  const [phone, setPhone] = useState<string>('');
+  const [email, setEmail] = useState<string>('');
+  const [password, setPassword] = useState<string>('');
+  const [consentMarketing, setConsentMarketing] = useState<boolean>(false);
+  const [acceptTerms, setAcceptTerms] = useState<boolean>(false);
+  const [signWaiver, setSignWaiver] = useState<boolean>(false);
+  const [busy, setBusy] = useState<boolean>(false);
+  const [needsEmailConfirm, setNeedsEmailConfirm] = useState<boolean>(false);
+  const [resentBusy, setResentBusy] = useState<boolean>(false);
 
-  const canSubmit = fullName && phone && email && password && acceptTerms && signWaiver && !busy;
+  const canSubmit = useMemo<boolean>(() => {
+    return Boolean(fullName && phone && email && password && acceptTerms && signWaiver && !busy);
+  }, [fullName, phone, email, password, acceptTerms, signWaiver, busy]);
 
   const onSignUp = async () => {
     try {
       if (!canSubmit) return;
       setBusy(true);
+      console.log('📝 SignUp start', { email });
 
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: { data: { full_name: fullName } }
+        options: { data: { full_name: fullName } },
       });
       if (error) throw error;
 
-      const userId = data.user?.id;
-      if (!userId) throw new Error('No user id');
+      const userId = data.user?.id ?? null;
+      console.log('✅ SignUp response', { userId, hasSession: Boolean(data.session) });
 
-      await supabase.from('profiles').update({
-        full_name: fullName,
-        phone,
-        consent_marketing: consentMarketing,
-        terms_version: '1.0',
-        terms_accepted_at: new Date().toISOString(),
-        waiver_signed_at: new Date().toISOString()
-      }).eq('id', userId);
+      if (userId) {
+        try {
+          const { error: profileErr } = await supabase
+            .from('profiles')
+            .update({
+              full_name: fullName,
+              phone,
+              consent_marketing: consentMarketing,
+              terms_version: '1.0',
+              terms_accepted_at: new Date().toISOString(),
+              waiver_signed_at: new Date().toISOString(),
+            })
+            .eq('id', userId);
+          if (profileErr) console.warn('⚠️ Profile update warning (likely unauthenticated until email confirmed):', profileErr);
+        } catch (profileEx) {
+          console.warn('⚠️ Profile update exception:', profileEx);
+        }
+      }
 
-      // Navigation will be handled by the root layout redirect
-    } catch (e:any) {
+      if (!data.session) {
+        setNeedsEmailConfirm(true);
+        Alert.alert(
+          'Verify your email',
+          'We sent a verification link to ' + email + '. Open it to activate your account, then return to the app and sign in.'
+        );
+      } else {
+        Alert.alert('Account created', 'You are now signed in.');
+      }
+    } catch (e: any) {
+      console.error('❌ Signup failed', e);
       Alert.alert('Signup failed', e.message ?? 'Try again');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const onOpenMail = () => {
+    if (Platform.OS !== 'web') {
+      Linking.openURL('mailto:' + email).catch(() => {
+        Alert.alert('Open your mail app', 'Please open your email app and find the verification link.');
+      });
+    } else {
+      Alert.alert('Check your email', 'Open your email in a new tab and click the verification link.');
+    }
+  };
+
+  const onResend = async () => {
+    try {
+      setResentBusy(true);
+      const { error } = await supabase.auth.resend({ type: 'signup', email });
+      if (error) throw error;
+      Alert.alert('Email sent', 'We re-sent the verification email.');
+    } catch (err: any) {
+      console.error('❌ Resend error', err);
+      Alert.alert('Could not resend', err.message ?? 'Try again in a minute.');
+    } finally {
+      setResentBusy(false);
     }
   };
 
@@ -55,78 +103,115 @@ export default function SignUp() {
           <Text style={styles.subtitle}>Join The Hot Temple community</Text>
         </View>
 
-        <View style={styles.form}>
-          <TextInput 
-            style={styles.input}
-            placeholder="Full name" 
-            placeholderTextColor="#666"
-            value={fullName} 
-            onChangeText={setFullName} 
-          />
-          <TextInput 
-            style={styles.input}
-            placeholder="Phone" 
-            placeholderTextColor="#666"
-            keyboardType="phone-pad" 
-            value={phone} 
-            onChangeText={setPhone} 
-          />
-          <TextInput 
-            style={styles.input}
-            placeholder="Email" 
-            placeholderTextColor="#666"
-            autoCapitalize="none" 
-            keyboardType="email-address" 
-            value={email} 
-            onChangeText={setEmail} 
-          />
-          <TextInput 
-            style={styles.input}
-            placeholder="Password" 
-            placeholderTextColor="#666"
-            secureTextEntry 
-            value={password} 
-            onChangeText={setPassword} 
-          />
+        {!needsEmailConfirm ? (
+          <View style={styles.form}>
+            <TextInput
+              testID="signup-fullname"
+              style={styles.input}
+              placeholder="Full name"
+              placeholderTextColor="#666"
+              value={fullName}
+              onChangeText={setFullName}
+            />
+            <TextInput
+              testID="signup-phone"
+              style={styles.input}
+              placeholder="Phone"
+              placeholderTextColor="#666"
+              keyboardType="phone-pad"
+              value={phone}
+              onChangeText={setPhone}
+            />
+            <TextInput
+              testID="signup-email"
+              style={styles.input}
+              placeholder="Email"
+              placeholderTextColor="#666"
+              autoCapitalize="none"
+              keyboardType="email-address"
+              value={email}
+              onChangeText={setEmail}
+            />
+            <TextInput
+              testID="signup-password"
+              style={styles.input}
+              placeholder="Password"
+              placeholderTextColor="#666"
+              secureTextEntry
+              value={password}
+              onChangeText={setPassword}
+            />
 
-          <View style={styles.checkboxes}>
-            <TouchableOpacity 
-              style={styles.checkbox} 
-              onPress={() => setConsentMarketing(v => !v)}
+            <View style={styles.checkboxes}>
+              <TouchableOpacity
+                testID="signup-consent"
+                style={styles.checkbox}
+                onPress={() => setConsentMarketing((v) => !v)}
+              >
+                <Text style={styles.checkboxIcon}>{consentMarketing ? '☑' : '☐'}</Text>
+                <Text style={styles.checkboxText}>I agree to receive marketing messages</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                testID="signup-terms"
+                style={styles.checkbox}
+                onPress={() => setAcceptTerms((v) => !v)}
+              >
+                <Text style={styles.checkboxIcon}>{acceptTerms ? '☑' : '☐'}</Text>
+                <Text style={styles.checkboxText}>I accept the Terms & Privacy Policy</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                testID="signup-waiver"
+                style={styles.checkbox}
+                onPress={() => setSignWaiver((v) => !v)}
+              >
+                <Text style={styles.checkboxIcon}>{signWaiver ? '☑' : '☐'}</Text>
+                <Text style={styles.checkboxText}>I have signed the waiver</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              testID="signup-submit"
+              style={[styles.button, !canSubmit && styles.buttonDisabled]}
+              disabled={!canSubmit}
+              onPress={onSignUp}
             >
-              <Text style={styles.checkboxIcon}>{consentMarketing ? '☑' : '☐'}</Text>
-              <Text style={styles.checkboxText}>I agree to receive marketing messages</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.checkbox} 
-              onPress={() => setAcceptTerms(v => !v)}
-            >
-              <Text style={styles.checkboxIcon}>{acceptTerms ? '☑' : '☐'}</Text>
-              <Text style={styles.checkboxText}>I accept the Terms & Privacy Policy</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={styles.checkbox} 
-              onPress={() => setSignWaiver(v => !v)}
-            >
-              <Text style={styles.checkboxIcon}>{signWaiver ? '☑' : '☐'}</Text>
-              <Text style={styles.checkboxText}>I have signed the waiver</Text>
+              <Text style={styles.buttonText}>{busy ? 'Creating…' : 'Create Account'}</Text>
             </TouchableOpacity>
           </View>
-
-          <TouchableOpacity 
-            style={[styles.button, !canSubmit && styles.buttonDisabled]} 
-            disabled={!canSubmit} 
-            onPress={onSignUp}
-          >
-            <Text style={styles.buttonText}>
-              {busy ? 'Creating…' : 'Create Account'}
+        ) : (
+          <View style={styles.verifyBox}>
+            <Text style={styles.verifyTitle}>Check your email</Text>
+            <Text style={styles.verifyText}>
+              We sent a verification link to {email}. Open it to activate your account. Then return to the app and sign in.
             </Text>
-          </TouchableOpacity>
-        </View>
 
-        <TouchableOpacity 
+            <TouchableOpacity testID="signup-open-mail" style={styles.button} onPress={onOpenMail}>
+              <Text style={styles.buttonText}>Open mail app</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              testID="signup-resend"
+              style={[styles.button, resentBusy && styles.buttonDisabled]}
+              disabled={resentBusy}
+              onPress={onResend}
+            >
+              <Text style={styles.buttonText}>{resentBusy ? 'Resending…' : 'Resend email'}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              testID="signup-go-signin"
+              style={[styles.linkBtn]}
+              onPress={() => router.replace('/(auth)/sign-in')}
+            >
+              <Text style={styles.linkText}>I verified it — Go to Sign In</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <TouchableOpacity
+          testID="signup-back"
           style={styles.backButton}
           onPress={() => router.back()}
         >
@@ -207,6 +292,34 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  verifyBox: {
+    backgroundColor: '#111',
+    borderColor: '#333',
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 20,
+    gap: 12,
+    marginBottom: 32,
+  },
+  verifyTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  verifyText: {
+    color: '#ccc',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  linkBtn: {
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  linkText: {
+    color: '#ff6b35',
     fontSize: 16,
     fontWeight: '600',
   },

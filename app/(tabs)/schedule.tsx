@@ -292,65 +292,129 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
         </ScrollView>
 
         {filtersOpen && (
-          <View style={styles.bottomSheetOverlay}>
-            <Pressable style={styles.bottomSheetBackdrop} onPress={() => setFiltersOpen(false)} />
-            <View style={[styles.bottomSheet, { maxHeight: '80%', paddingBottom: 16 + insets.bottom }]} testID="filters-bottom-sheet">
-              <ScrollView contentContainerStyle={styles.bottomSheetContent}>
-                <Text style={styles.sheetSectionTitle}>Class Type</Text>
-                <View style={styles.sheetChipsRow}>
-                  {titleOptions.map((t) => {
-                    const active = selectedTitles.has(t);
-                    return (
-                      <TouchableOpacity key={`t-${t}`} onPress={() => {
-                        const next = new Set(selectedTitles);
-                        if (active) next.delete(t); else next.add(t);
-                        setSelectedTitles(next);
-                      }} style={[styles.sheetChip, active && styles.sheetChipActive]} testID={`sheet-title-${t}`}>
-                        <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{t}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+          Platform.OS === 'web' ? (
+            <View style={styles.webModalOverlay}>
+              <Pressable style={styles.webModalBackdrop} onPress={() => setFiltersOpen(false)} />
+              <View style={styles.webModalCard} testID="filters-web-modal">
+                <ScrollView contentContainerStyle={styles.webModalContent}>
+                  <Text style={styles.webModalTitle}>Filters</Text>
 
-                <Text style={[styles.sheetSectionTitle, { marginTop: 12 }]}>Instructor</Text>
-                <View style={styles.sheetChipsRow}>
-                  {instructorOptions.map((i) => {
-                    const active = selectedInstructors.has(i);
-                    return (
-                      <TouchableOpacity key={`i-${i}`} onPress={() => {
-                        const next = new Set(selectedInstructors);
-                        if (active) next.delete(i); else next.add(i);
-                        setSelectedInstructors(next);
-                      }} style={[styles.sheetChip, active && styles.sheetChipActive]} testID={`sheet-instructor-${i}`}>
-                        <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{i}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                  <Text style={styles.sheetSectionTitle}>Class Type</Text>
+                  <View style={styles.sheetChipsRow}>
+                    {titleOptions.map((t) => {
+                      const active = selectedTitles.has(t);
+                      return (
+                        <TouchableOpacity key={`t-${t}`} onPress={() => {
+                          const next = new Set(selectedTitles);
+                          if (active) next.delete(t); else next.add(t);
+                          setSelectedTitles(next);
+                        }} style={[styles.sheetChip, styles.sheetChipWeb, active && styles.sheetChipActive]} testID={`sheet-title-${t}`}>
+                          <Text style={[styles.sheetChipText, styles.sheetChipTextWeb, active && styles.sheetChipTextActive]}>{t}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
 
-                <Text style={[styles.sheetSectionTitle, { marginTop: 12 }]}>Duration</Text>
-                <View style={styles.sheetChipsRow}>
-                  {[45,60,75,90].map((m) => {
-                    const active = durationFilter === m;
-                    return (
-                      <TouchableOpacity key={`d-${m}`} onPress={() => setDurationFilter(active ? null : m)} style={[styles.sheetChip, active && styles.sheetChipActive]} testID={`sheet-duration-${m}`}>
-                        <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{m}m+</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                  <Text style={[styles.sheetSectionTitle, { marginTop: 12 }]}>Instructor</Text>
+                  <View style={styles.sheetChipsRow}>
+                    {instructorOptions.map((i) => {
+                      const active = selectedInstructors.has(i);
+                      return (
+                        <TouchableOpacity key={`i-${i}`} onPress={() => {
+                          const next = new Set(selectedInstructors);
+                          if (active) next.delete(i); else next.add(i);
+                          setSelectedInstructors(next);
+                        }} style={[styles.sheetChip, styles.sheetChipWeb, active && styles.sheetChipActive]} testID={`sheet-instructor-${i}`}>
+                          <Text style={[styles.sheetChipText, styles.sheetChipTextWeb, active && styles.sheetChipTextActive]}>{i}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
 
-                <View style={styles.sheetActions}>
-                  <TouchableOpacity onPress={resetFilters} style={[styles.sheetBtn, styles.sheetBtnSecondary]} testID="sheet-reset">
-                    <Text style={styles.sheetBtnSecondaryText}>Reset All</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => setFiltersOpen(false)} style={[styles.sheetBtn, styles.sheetBtnPrimary]} testID="sheet-apply">
-                    <Text style={styles.sheetBtnPrimaryText}>Apply</Text>
-                  </TouchableOpacity>
-                </View>
-              </ScrollView>
+                  <Text style={[styles.sheetSectionTitle, { marginTop: 12 }]}>Duration</Text>
+                  <View style={styles.sheetChipsRow}>
+                    {[45,60,75,90].map((m) => {
+                      const active = durationFilter === m;
+                      return (
+                        <TouchableOpacity key={`d-${m}`} onPress={() => setDurationFilter(active ? null : m)} style={[styles.sheetChip, styles.sheetChipWeb, active && styles.sheetChipActive]} testID={`sheet-duration-${m}`}>
+                          <Text style={[styles.sheetChipText, styles.sheetChipTextWeb, active && styles.sheetChipTextActive]}>{m}m+</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <View style={styles.webModalActions}>
+                    <TouchableOpacity onPress={resetFilters} style={[styles.sheetBtn, styles.sheetBtnSecondary]} testID="sheet-reset-web">
+                      <Text style={styles.sheetBtnSecondaryText}>Reset All</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setFiltersOpen(false)} style={[styles.sheetBtn, styles.sheetBtnPrimary]} testID="sheet-apply-web">
+                      <Text style={styles.sheetBtnPrimaryText}>Apply</Text>
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
+              </View>
             </View>
-          </View>
+          ) : (
+            <View style={styles.bottomSheetOverlay}>
+              <Pressable style={styles.bottomSheetBackdrop} onPress={() => setFiltersOpen(false)} />
+              <View style={[styles.bottomSheet, { maxHeight: '80%', paddingBottom: 16 + insets.bottom }]} testID="filters-bottom-sheet">
+                <ScrollView contentContainerStyle={styles.bottomSheetContent}>
+                  <Text style={styles.sheetSectionTitle}>Class Type</Text>
+                  <View style={styles.sheetChipsRow}>
+                    {titleOptions.map((t) => {
+                      const active = selectedTitles.has(t);
+                      return (
+                        <TouchableOpacity key={`t-${t}`} onPress={() => {
+                          const next = new Set(selectedTitles);
+                          if (active) next.delete(t); else next.add(t);
+                          setSelectedTitles(next);
+                        }} style={[styles.sheetChip, active && styles.sheetChipActive]} testID={`sheet-title-${t}`}>
+                          <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{t}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <Text style={[styles.sheetSectionTitle, { marginTop: 12 }]}>Instructor</Text>
+                  <View style={styles.sheetChipsRow}>
+                    {instructorOptions.map((i) => {
+                      const active = selectedInstructors.has(i);
+                      return (
+                        <TouchableOpacity key={`i-${i}`} onPress={() => {
+                          const next = new Set(selectedInstructors);
+                          if (active) next.delete(i); else next.add(i);
+                          setSelectedInstructors(next);
+                        }} style={[styles.sheetChip, active && styles.sheetChipActive]} testID={`sheet-instructor-${i}`}>
+                          <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{i}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <Text style={[styles.sheetSectionTitle, { marginTop: 12 }]}>Duration</Text>
+                  <View style={styles.sheetChipsRow}>
+                    {[45,60,75,90].map((m) => {
+                      const active = durationFilter === m;
+                      return (
+                        <TouchableOpacity key={`d-${m}`} onPress={() => setDurationFilter(active ? null : m)} style={[styles.sheetChip, active && styles.sheetChipActive]} testID={`sheet-duration-${m}`}>
+                          <Text style={[styles.sheetChipText, active && styles.sheetChipTextActive]}>{m}m+</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+
+                  <View style={styles.sheetActions}>
+                    <TouchableOpacity onPress={resetFilters} style={[styles.sheetBtn, styles.sheetBtnSecondary]} testID="sheet-reset">
+                      <Text style={styles.sheetBtnSecondaryText}>Reset All</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setFiltersOpen(false)} style={[styles.sheetBtn, styles.sheetBtnPrimary]} testID="sheet-apply">
+                      <Text style={styles.sheetBtnPrimaryText}>Apply</Text>
+                    </TouchableOpacity>
+                  </View>
+                </ScrollView>
+              </View>
+            </View>
+          )
         )}
       </View>
 
@@ -544,6 +608,14 @@ const styles = StyleSheet.create({
   sheetBtnPrimary: { marginLeft: 8, backgroundColor: theme.colors.primary },
   sheetBtnSecondaryText: { color: theme.colors.text },
   sheetBtnPrimaryText: { color: '#fff', fontWeight: '700' },
+  webModalOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, elevation: 1000, alignItems: 'center', justifyContent: 'center' },
+  webModalBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.35)' },
+  webModalCard: { width: '92%', maxWidth: 720, maxHeight: '82%', backgroundColor: theme.colors.surface, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.border, overflow: 'hidden' },
+  webModalContent: { paddingHorizontal: theme.spacing.xl, paddingTop: theme.spacing.lg, paddingBottom: theme.spacing.lg },
+  webModalTitle: { fontSize: 18, fontWeight: '800', color: theme.colors.text, marginBottom: 12 },
+  webModalActions: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 20 },
+  sheetChipWeb: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18 },
+  sheetChipTextWeb: { fontSize: 14 },
   loading: { padding: theme.spacing.lg, alignItems: 'center' },
   loadingText: { marginTop: 8, color: theme.colors.textSecondary, marginBottom: theme.spacing.md },
   skeletonList: { width: '100%', paddingHorizontal: theme.spacing.lg, gap: theme.spacing.md },

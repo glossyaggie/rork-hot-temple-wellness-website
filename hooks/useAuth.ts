@@ -95,5 +95,5 @@ export function useAuth() {
     };
   }, []);
 
-  return { session, role, loading, isStaff: role === 'admin' || role === 'instructor' };
+  return { session, role, loading, isStaff: role === 'admin' };
 }

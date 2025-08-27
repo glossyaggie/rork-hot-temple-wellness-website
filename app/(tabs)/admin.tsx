@@ -78,6 +78,28 @@ const TIMES = ['5:30 AM', '6:00 AM', '8:00 AM', '9:30 AM', '11:00 AM', '12:30 PM
 
 export default function AdminScreen() {
   const { isStaff, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={styles.tabTitle}>Loading...</Text>
+      </View>
+    );
+  }
+
+  if (!isStaff) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
+        <Text style={[styles.tabTitle, { textAlign: 'center', marginBottom: 16 }]}>Access Denied</Text>
+        <Text style={[styles.comingSoonText, { textAlign: 'center' }]}>Admin access only.</Text>
+      </View>
+    );
+  }
+
+  return <AdminContent />;
+}
+
+function AdminContent() {
   const [activeTab, setActiveTab] = useState<'classes' | 'instructors' | 'notifications' | 'contacts'>('classes');
 
   const [showClassModal, setShowClassModal] = useState(false);
@@ -109,7 +131,6 @@ export default function AdminScreen() {
   const smsStats = getSmsStats();
   const recentNotifications = getRecentNotifications();
 
-  // testIDs
   const testIDs = {
     container: 'admin-container',
   } as const;
@@ -139,23 +160,6 @@ export default function AdminScreen() {
     channels: ['push'] as ('push' | 'email' | 'sms')[],
     scheduledFor: new Date().toISOString().split('T')[0],
   });
-
-  if (loading) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={styles.tabTitle}>Loading...</Text>
-      </View>
-    );
-  }
-
-  if (!isStaff) {
-    return (
-      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 20 }]}>
-        <Text style={[styles.tabTitle, { textAlign: 'center', marginBottom: 16 }]}>Access Denied</Text>
-        <Text style={[styles.comingSoonText, { textAlign: 'center' }]}>You need admin or instructor privileges to access this section.</Text>
-      </View>
-    );
-  }
 
   const handleImportContacts = async () => {
     if (!csvData.trim()) {
@@ -727,7 +731,6 @@ export default function AdminScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Tab Navigation */}
       <View style={styles.tabNavigation}>
         <TouchableOpacity
           style={[styles.tab, activeTab === 'classes' && styles.activeTab]}
@@ -762,13 +765,11 @@ export default function AdminScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Tab Content */}
       {activeTab === 'classes' && renderClassesTab()}
       {activeTab === 'instructors' && renderInstructorsTab()}
       {activeTab === 'notifications' && renderNotificationsTab()}
       {activeTab === 'contacts' && renderContactsTab()}
 
-      {/* Class Modal */}
       <Modal
         visible={showClassModal}
         animationType="slide"
@@ -897,7 +898,6 @@ export default function AdminScreen() {
         </View>
       </Modal>
 
-      {/* Notification Modal */}
       <Modal
         visible={showNotificationModal}
         animationType="slide"
@@ -995,7 +995,6 @@ export default function AdminScreen() {
         </View>
       </Modal>
 
-      {/* Instructor Modal */}
       <Modal
         visible={showInstructorModal}
         animationType="slide"
@@ -1118,7 +1117,6 @@ export default function AdminScreen() {
         </View>
       </Modal>
 
-      {/* Import Contacts Modal */}
       <Modal
         visible={showImportModal}
         animationType="slide"

@@ -18,18 +18,18 @@ export default function RootLayout() {
     );
   }
 
-  if (!session) {
-    console.log('➡️ No session. Redirecting to auth welcome');
-    return <Redirect href="/(auth)/welcome" />;
-  }
-
   return (
     <BookingsProvider>
       <HabitTrackerProvider>
         <Stack screenOptions={{ headerShown: false }}>
+          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         </Stack>
-        <Redirect href="/(tabs)" />
+        {!session ? (
+          <Redirect href="/(auth)/welcome" />
+        ) : (
+          <Redirect href="/(tabs)" />
+        )}
       </HabitTrackerProvider>
     </BookingsProvider>
   );

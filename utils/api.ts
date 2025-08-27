@@ -1,5 +1,7 @@
 // Import the configured supabase client
 import { supabase } from '@/lib/supabase';
+import * as WebBrowser from 'expo-web-browser';
+import { Platform } from 'react-native';
 
 console.log('🔧 API utils loaded with Supabase client');
 
@@ -315,6 +317,125 @@ export const requireStaff = (userRole: string) => {
 };
 
 // Environment validation
+export type ActivePassSummary = {
+  hasUnlimited: boolean;
+  unlimitedValidUntil: string | null;
+  totalCredits: number;
+  creditPassId: string | null;
+};
+
+export const summarizeActivePasses = (
+  passes: Array<{ id: string; pass_type?: string | null; remaining_credits?: number | null; expires_at?: string | null; is_active?: boolean | null }>,
+  nowISO?: string
+): ActivePassSummary => {
+  const now = nowISO ? new Date(nowISO) : new Date();
+  let hasUnlimited = false;
+  let unlimitedValidUntil: string | null = null;
+  let totalCredits = 0;
+  let creditPassId: string | null = null;
+  for (const p of passes) {
+    if (p.is_active === false) continue;
+    const exp = p.expires_at ?? null;
+    if (exp && new Date(exp) < now) continue;
+    const pt = (p.pass_type ?? '').toLowerCase();
+    if (pt.includes('unlimited') || pt.includes('weekly') || pt.includes('monthly') || pt.includes('year')) {
+      hasUnlimited = true;
+      if (!unlimitedValidUntil || (exp && new Date(exp) > new Date(unlimitedValidUntil))) unlimitedValidUntil = exp;
+    } else {
+      const rc = p.remaining_credits ?? 0;
+      if (rc > 0) {
+        totalCredits += rc;
+        if (!creditPassId) creditPassId = p.id;
+      }
+    }
+  }
+  return { hasUnlimited, unlimitedValidUntil, totalCredits, creditPassId };
+};
+
+export const bookWithEligibility = async (
+  userId: string,
+  classId: number
+): Promise<{ booked: boolean; reason?: string }> => {
+  try {
+    const { data: passes, error } = await supabase
+      .from('user_passes')
+      .select('id, pass_type, remaining_credits, expires_at, is_active')
+      .eq('user_id', userId);
+    if (error) throw error;
+    const summary = summarizeActivePasses(passes ?? []);
+
+    if (summary.hasUnlimited) {
+      const { error: bookErr } = await supabase
+        .from('class_bookings')
+        .insert({ user_id: userId, class_id: classId });
+      if (bookErr) throw bookErr;
+      return { booked: true };
+    }
+
+    if (summary.totalCredits > 0 && summary.creditPassId) {
+      const { error: bookErr } = await supabase
+        .from('class_bookings')
+        .insert({ user_id: userId, class_id: classId });
+      if (bookErr) throw bookErr;
+      const { error: decErr } = await supabase
+        .from('user_passes')
+        .update({ remaining_credits: (passes?.find(p => p.id === summary.creditPassId)?.remaining_credits ?? 1) - 1 })
+        .eq('id', summary.creditPassId);
+      if (decErr) throw decErr;
+      return { booked: true };
+    }
+
+    return { booked: false, reason: 'no_pass' };
+  } catch (e: any) {
+    console.error('bookWithEligibility error', e);
+    return { booked: false, reason: e?.message ?? 'error' };
+  }
+};
+
+export type CreateCheckoutPayload = {
+  priceId: string;
+  quantity?: number;
+  mode?: 'payment' | 'subscription';
+  metadata?: Record<string, string | number | boolean | null>;
+  successUrl: string;
+  cancelUrl: string;
+};
+
+export const createCheckout = async (payload: CreateCheckoutPayload): Promise<{ url: string; sessionId: string } | null> => {
+  try {
+    const { data, error } = await supabase.functions.invoke('create-checkout', { body: payload });
+    if (error) throw error as any;
+    if (!data?.url) return null;
+    return data as { url: string; sessionId: string };
+  } catch (e) {
+    console.error('createCheckout error', e);
+    return null;
+  }
+};
+
+export const openCheckout = async (checkoutUrl: string): Promise<void> => {
+  try {
+    if (Platform.OS === 'web') {
+      window.open(checkoutUrl, '_blank');
+      return;
+    }
+    await WebBrowser.openBrowserAsync(checkoutUrl);
+  } catch (e) {
+    console.error('openCheckout error', e);
+  }
+};
+
+export const confirmPayment = async (sessionId: string): Promise<{ ok: boolean }> => {
+  try {
+    const { data, error } = await supabase.functions.invoke('confirm-payment', { body: { sessionId } });
+    if (error) throw error as any;
+    return { ok: Boolean((data as any)?.ok ?? true) };
+  } catch (e) {
+    console.error('confirmPayment error', e);
+    return { ok: false };
+  }
+};
+
 export const validateEnvironment = () => {
   console.log('✅ Environment validation: Using configured Supabase client');
   return true; // Always return true since we're using hardcoded values

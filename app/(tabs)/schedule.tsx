@@ -1,11 +1,13 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, ActivityIndicator, TextInput, SectionList, Pressable, Platform, KeyboardAvoidingView } from 'react-native';
-import { Clock, Users, Pencil, Plus, Trash2, Calendar, RotateCcw, ChevronDown } from 'lucide-react-native';
+import { Clock, Users, Pencil, Plus, Trash2, Calendar, RotateCcw, ChevronDown, TicketCheck } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
 import { useSchedule, ScheduleRow } from '@/hooks/useSchedule';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import PassPurchaseModal, { PriceMap } from '@/components/PassPurchaseModal';
+import { bookWithEligibility } from '@/utils/api';
 
 function fmtTimeLabel(raw: string): string {
   return raw ?? '';
@@ -96,6 +98,19 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
   const [datePickerOpen, setDatePickerOpen] = useState<boolean>(false);
   const [dateInput, setDateInput] = useState<string>('');
   const [draft, setDraft] = useState<{ title: string; instructor: string; start_time: string; end_time: string; capacity: string }>({ title: '', instructor: '', start_time: '', end_time: '', capacity: '' });
+
+  const [purchaseOpen, setPurchaseOpen] = useState<boolean>(false);
+  const priceMap: PriceMap = useMemo(() => ({
+    // Fill with Stripe Price IDs
+    // 'single': 'price_...',
+    // '5-class': 'price_...',
+    // '10-class': 'price_...',
+    // '25-class': 'price_...',
+    // 'weekly-unlimited': 'price_...',
+    // 'monthly-unlimited': 'price_...',
+    // 'vip-monthly': 'price_...',
+    // 'vip-yearly': 'price_...',
+  }), []);
 
   const allDays = useMemo(() => {
     const days: Date[] = [];
@@ -353,6 +368,32 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
                     </View>
                   )}
                 </View>
+                <TouchableOpacity
+                  style={styles.bookBtn}
+                  testID={`book-${c.id}`}
+                  onPress={async () => {
+                    try {
+                      const uid = useAuth().user?.id;
+                      if (!uid) {
+                        Alert.alert('Please sign in to book');
+                        return;
+                      }
+                      const res = await bookWithEligibility(uid, c.id);
+                      if (res.booked) {
+                        Alert.alert('Booked', 'You are booked in!');
+                      } else if (res.reason === 'no_pass') {
+                        setPurchaseOpen(true);
+                      } else {
+                        Alert.alert('Not booked', res.reason ?? 'Try again');
+                      }
+                    } catch (e) {
+                      Alert.alert('Error', 'Could not book, please try again.');
+                    }
+                  }}
+                >
+                  <TicketCheck size={16} color={'#fff'} />
+                  <Text style={styles.bookBtnText}>Book me in</Text>
+                </TouchableOpacity>
               </View>
             );
           }}
@@ -567,6 +608,15 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
           </KeyboardAvoidingView>
         </View>
       )}
+      <PassPurchaseModal
+        visible={purchaseOpen}
+        onClose={() => setPurchaseOpen(false)}
+        onSuccess={(msg) => {
+          Alert.alert('Purchase', msg);
+          refetch();
+        }}
+        priceMap={priceMap}
+      />
     </SafeAreaView>
   );
 }
@@ -638,6 +688,8 @@ const styles = StyleSheet.create({
   metaText: { color: theme.colors.textSecondary },
   actions: { flexDirection: 'row', gap: 8 },
   iconBtn: { padding: 6 },
+  bookBtn: { marginTop: 12, backgroundColor: theme.colors.primary, borderRadius: 12, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
+  bookBtnText: { color: '#fff', fontWeight: '700' },
   noClassesContainer: { padding: theme.spacing.xl, alignItems: 'center' },
   noClassesText: { color: theme.colors.textSecondary, textAlign: 'center' },
   modal: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },

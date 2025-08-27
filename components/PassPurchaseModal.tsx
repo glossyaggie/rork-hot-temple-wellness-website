@@ -31,7 +31,7 @@ interface PassPurchaseModalProps {
   visible: boolean;
   onClose: () => void;
   onSuccess: (message: string) => void;
-  priceMap: PriceMap;
+  priceMap?: PriceMap;
 }
 
 export default function PassPurchaseModal({ visible, onClose, onSuccess, priceMap }: PassPurchaseModalProps) {
@@ -39,11 +39,12 @@ export default function PassPurchaseModal({ visible, onClose, onSuccess, priceMa
   const [loading, setLoading] = useState<boolean>(false);
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
 
-  const available = useMemo(() => PASSES.filter(p => priceMap[p.id as keyof PriceMap]), [priceMap]);
+  const safePriceMap: PriceMap = priceMap ?? {};
+  const available = useMemo(() => PASSES.filter(p => safePriceMap[p.id as keyof PriceMap]), [safePriceMap]);
 
   const handlePurchase = async (pass: Pass) => {
     try {
-      const priceId = priceMap[pass.id as keyof PriceMap];
+      const priceId = safePriceMap[pass.id as keyof PriceMap];
       if (!priceId) {
         onSuccess('Price not configured.');
         return;

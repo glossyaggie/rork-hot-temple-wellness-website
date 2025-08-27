@@ -9,10 +9,10 @@ export default function RootLayout() {
   const { session, loading } = useAuth();
 
   if (loading) {
-    console.log('⏳ Root loading...');
+    console.log('⏳ Root loading screen render');
     return (
       <View style={{ flex: 1, justifyContent:'center', alignItems:'center', backgroundColor: '#000' }}>
-        <Text style={{ color: '#fff', marginBottom: 16, fontSize: 40 }}>🔥</Text>
+        <Text style={{ color: '#fff', marginBottom: 16, fontSize: 40 }}>⚡️</Text>
         <ActivityIndicator color="#ff6b35" size="large" />
         <Text style={{ color: '#999', marginTop: 16 }}>Loading...</Text>
       </View>

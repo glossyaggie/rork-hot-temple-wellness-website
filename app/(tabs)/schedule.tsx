@@ -35,7 +35,7 @@ export default function ScheduleScreen() {
     visible: boolean;
   }>({ message: '', type: 'info', visible: false });
 
-  const { user, hasValidPass } = useAuth();
+  const { user } = useAuth();
   const { classes, bookClass } = useBookings();
 
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -276,7 +276,7 @@ export default function ScheduleScreen() {
 
       {/* Selected Date Header */}
       <View style={styles.selectedDateHeader}>
-        <Text style={styles.selectedDateText}>{formatDateForDisplay(selectedDate)}</Text>
+        <Text style={styles.selectedDateHeaderText}>{formatDateForDisplay(selectedDate)}</Text>
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -306,20 +306,7 @@ export default function ScheduleScreen() {
           </View>
         )}
 
-        {user && !hasValidPass() && (
-          <View style={styles.passPrompt}>
-            <Text style={styles.promptTitle}>Need Credits?</Text>
-            <Text style={styles.promptText}>
-              Purchase a pass to start booking classes
-            </Text>
-            <TouchableOpacity
-              style={styles.promptButton}
-              onPress={() => setShowPassModal(true)}
-            >
-              <Text style={styles.promptButtonText}>Buy Pass</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+
       </ScrollView>
 
       <AuthModal
@@ -466,7 +453,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: theme.colors.border,
   },
-  selectedDateText: {
+  selectedDateHeaderText: {
     fontSize: 18,
     fontWeight: 'bold',
     color: theme.colors.text,

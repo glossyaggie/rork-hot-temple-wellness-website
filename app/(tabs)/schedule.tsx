@@ -406,6 +406,14 @@ export default function ScheduleScreen() {
           stickySectionHeadersEnabled
           showsVerticalScrollIndicator={false}
           testID="schedule-list"
+          getItemLayout={(data, index) => {
+            const ITEM_HEIGHT = 112;
+            const HEADER_HEIGHT = 36;
+            const itemsBefore = index;
+            const length = ITEM_HEIGHT;
+            const offset = HEADER_HEIGHT + itemsBefore * ITEM_HEIGHT;
+            return { length, offset, index };
+          }}
           ListEmptyComponent={(
             <View style={styles.noClassesContainer} testID="no-classes">
               <Text style={styles.noClassesText}>No classes match your filters. Try changing the day or clearing filters.</Text>

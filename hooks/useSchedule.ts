@@ -12,17 +12,6 @@ export interface ScheduleRow {
   duration_min?: number;
 }
 
-interface ScheduleViewRow {
-  id: number;
-  title: string;
-  instructor: string;
-  capacity: number | null;
-  start_local: string;
-  end_local: string;
-  local_date?: string; // YYYY-MM-DD
-  duration_min?: number;
-}
-
 export interface ScheduleQueryParams {
   titles?: string[];
   instructors?: string[];
@@ -44,15 +33,14 @@ async function fetchSchedule(params: ScheduleQueryParams): Promise<ScheduleRow[]
     console.error('[useSchedule] fetchSchedule error', error);
     throw error;
   }
-  const rows = (data ?? []) as unknown as ScheduleViewRow[];
-  // Map view rows to ScheduleRow shape expected by UI: use local times directly
-  const mapped: ScheduleRow[] = rows.map((r) => ({
+  const rows = (data ?? []) as unknown as Array<{ id: number; title: string; instructor: string; capacity: number | null; start_local: string; end_local: string; duration_min?: number }>;
+  const mapped: ScheduleRow[] = rows.map(r => ({
     id: r.id,
     title: r.title,
     instructor: r.instructor,
     start_time: r.start_local,
     end_time: r.end_local,
-    capacity: r.capacity ?? null,
+    capacity: r.capacity,
     duration_min: r.duration_min,
   }));
   return mapped;

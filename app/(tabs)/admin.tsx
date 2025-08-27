@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -29,52 +29,15 @@ import {
 import { theme } from '@/constants/theme';
 import { ClassSlot, Instructor, Notification } from '@/types';
 import NotificationBanner from '@/components/NotificationBanner';
-import { useBookings } from '@/hooks/useBookings';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useSchedule, ScheduleRow } from '@/hooks/useSchedule';
 import { useAuth } from '@/hooks/useAuth';
 import { requireStaff, requireAdmin } from '@/utils/api';
 
-const MOCK_INSTRUCTORS: Instructor[] = [
-  {
-    id: '1',
-    name: 'Sarah',
-    email: 'sarah@hottemple.com',
-    phone: '+61 400 123 456',
-    specialties: ['Hot Yoga', 'Vinyasa'],
-    bio: 'Certified yoga instructor with 8+ years experience',
-    isActive: true,
-  },
-  {
-    id: '2',
-    name: 'Mike',
-    email: 'mike@hottemple.com',
-    phone: '+61 400 123 457',
-    specialties: ['Hot Pilates', 'HIIT'],
-    bio: 'Former athlete turned wellness coach',
-    isActive: true,
-  },
-  {
-    id: '3',
-    name: 'Emma',
-    email: 'emma@hottemple.com',
-    phone: '+61 400 123 458',
-    specialties: ['Hot Yoga', 'Meditation'],
-    bio: 'Mindfulness and movement specialist',
-    isActive: true,
-  },
-  {
-    id: '4',
-    name: 'Lisa',
-    email: 'lisa@hottemple.com',
-    phone: '+61 400 123 459',
-    specialties: ['Hot Pilates', 'Barre'],
-    bio: 'Dance and fitness fusion expert',
-    isActive: true,
-  },
-];
+const MOCK_INSTRUCTORS: Instructor[] = [];
 
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-const TIMES = ['5:30 AM', '6:00 AM', '8:00 AM', '9:30 AM', '11:00 AM', '12:30 PM', '4:00 PM', '4:30 PM', '6:00 PM', '6:30 PM'];
+const DAYS: string[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const TIMES: string[] = [];
 
 export default function AdminScreen() {
   const { isStaff, loading } = useAuth();
@@ -116,7 +79,7 @@ function AdminContent() {
     visible: boolean;
   }>({ message: '', type: 'info', visible: false });
 
-  const { classes } = useBookings();
+  const schedule = useSchedule({});
   const { 
     notifications, 
     campaigns, 
@@ -199,20 +162,27 @@ function AdminContent() {
     setNotification(prev => ({ ...prev, visible: false }));
   };
 
-  const handleSaveClass = () => {
-    // Note: In a real app, this would update the backend and refresh the data
-    // For now, we'll just show a success message since we're using mock data
-    showNotificationBanner(
-      editingClass ? 'Class updated successfully!' : 'Class created successfully!', 
-      'success'
-    );
-    
-    setShowClassModal(false);
-    setEditingClass(null);
-    resetNewClass();
+  const [draft, setDraft] = useState<{ title: string; instructor: string; start_time: string; end_time: string; capacity: string }>({ title: '', instructor: '', start_time: '', end_time: '', capacity: '' });
+
+  const handleSaveClass = async () => {
+    try {
+      if (editingClass && editingClass.id) {
+        await schedule.update({ id: Number(editingClass.id), patch: {
+          title: draft.title, instructor: draft.instructor, start_time: draft.start_time, end_time: draft.end_time, capacity: draft.capacity ? Number(draft.capacity) : null,
+        }});
+      } else {
+        await schedule.add({ title: draft.title, instructor: draft.instructor, start_time: draft.start_time, end_time: draft.end_time, capacity: draft.capacity ? Number(draft.capacity) : null });
+      }
+      showNotificationBanner('Saved!', 'success');
+      setShowClassModal(false);
+      setEditingClass(null);
+    } catch (e) {
+      console.error('Save class error', e);
+      showNotificationBanner('Save failed', 'error');
+    }
   };
 
-  const handleDeleteClass = (classId: string) => {
+  const handleDeleteReal = (classId: string, numericId: number) => {
     Alert.alert(
       'Delete Class',
       'Are you sure you want to delete this class? This action cannot be undone.',
@@ -221,9 +191,14 @@ function AdminContent() {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            // Note: In a real app, this would delete from backend and refresh the data
-            showNotificationBanner('Class deleted successfully!', 'success');
+          onPress: async () => {
+            try {
+              await schedule.remove(numericId);
+              showNotificationBanner('Class deleted successfully!', 'success');
+            } catch (e) {
+              console.error('Delete failed', e);
+              showNotificationBanner('Delete failed', 'error');
+            }
           },
         },
       ]
@@ -232,15 +207,6 @@ function AdminContent() {
 
   const handleEditClass = (classData: ClassSlot) => {
     setEditingClass(classData);
-    setNewClass({
-      day: classData.day,
-      time: classData.time,
-      type: classData.type,
-      instructor: classData.instructor,
-      maxCapacity: classData.maxCapacity.toString(),
-      isRecurring: classData.isRecurring ?? true,
-      description: classData.description || '',
-    });
     setShowClassModal(true);
   };
 
@@ -349,122 +315,86 @@ function AdminContent() {
     }));
   };
 
-  const renderClassesTab = () => (
-    <View style={styles.tabContent}>
-      <View style={styles.tabHeader}>
-        <Text style={styles.tabTitle}>Class Management</Text>
-        <TouchableOpacity
-          style={styles.addButton}
-          onPress={() => {
-            resetNewClass();
-            setEditingClass(null);
-            setShowClassModal(true);
-          }}
-        >
-          <Plus size={20} color="white" />
-          <Text style={styles.addButtonText}>Add Class</Text>
-        </TouchableOpacity>
-      </View>
+  const renderClassesTab = () => {
+    const grouped = useMemo(() => {
+      const m = new Map<string, ScheduleRow[]>();
+      (schedule.items ?? []).forEach(r => {
+        const day = r.start_time.slice(0,10);
+        if (!m.has(day)) m.set(day, []);
+        m.get(day)!.push(r);
+      });
+      return Array.from(m.entries()).sort((a,b)=>a[0].localeCompare(b[0]));
+    }, [schedule.items]);
 
-      <ScrollView style={styles.classList} showsVerticalScrollIndicator={false}>
-        {DAYS.map(day => {
-          const dayClasses = classes.filter(c => c.day === day);
-          
-          return (
+    return (
+      <View style={styles.tabContent}>
+        <View style={styles.tabHeader}>
+          <Text style={styles.tabTitle}>Class Management</Text>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => {
+              setEditingClass(null);
+              setDraft({ title: '', instructor: '', start_time: new Date().toISOString(), end_time: new Date(Date.now()+3600000).toISOString(), capacity: '' });
+              setShowClassModal(true);
+            }}
+          >
+            <Plus size={20} color="white" />
+            <Text style={styles.addButtonText}>Add Class</Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView style={styles.classList} showsVerticalScrollIndicator={false}>
+          {grouped.length === 0 && (
+            <Text style={styles.noClassesText}>No classes scheduled</Text>
+          )}
+          {grouped.map(([day, list]) => (
             <View key={day} style={styles.daySection}>
-              <Text style={styles.dayTitle}>{day}</Text>
-              {dayClasses.length > 0 ? (
-                dayClasses.map(classItem => (
-                  <View key={classItem.id} style={styles.classCard}>
-                    <View style={styles.classInfo}>
-                      <View style={styles.classHeader}>
-                        <Text style={styles.classTime}>{classItem.time}</Text>
-                        <View style={styles.classType}>
-                          <Text style={styles.classTypeText}>{classItem.type}</Text>
-                        </View>
-                      </View>
-                      <Text style={styles.classInstructor}>with {classItem.instructor}</Text>
-                      <View style={styles.classStats}>
-                        <View style={styles.statItem}>
-                          <Users size={14} color={theme.colors.textSecondary} />
-                          <Text style={styles.statText}>{classItem.bookings}/{classItem.maxCapacity}</Text>
-                        </View>
-                        {classItem.isRecurring && (
-                          <View style={styles.recurringBadge}>
-                            <Text style={styles.recurringText}>Weekly</Text>
-                          </View>
-                        )}
+              <Text style={styles.dayTitle}>{new Date(day).toDateString()}</Text>
+              {list.map(item => (
+                <View key={item.id} style={styles.classCard}>
+                  <View style={styles.classInfo}>
+                    <View style={styles.classHeader}>
+                      <Text style={styles.classTime}>{item.start_time.slice(11,16)} - {item.end_time.slice(11,16)}</Text>
+                      <View style={styles.classType}>
+                        <Text style={styles.classTypeText}>{item.title}</Text>
                       </View>
                     </View>
-                    
-                    <View style={styles.classActions}>
-                      <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={() => handleEditClass(classItem)}
-                      >
-                        <Edit3 size={16} color={theme.colors.primary} />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        style={styles.actionButton}
-                        onPress={() => handleDeleteClass(classItem.id)}
-                      >
-                        <Trash2 size={16} color={theme.colors.error} />
-                      </TouchableOpacity>
-                    </View>
+                    <Text style={styles.classInstructor}>with {item.instructor}</Text>
                   </View>
-                ))
-              ) : (
-                <Text style={styles.noClassesText}>No classes scheduled</Text>
-              )}
+                  <View style={styles.classActions}>
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={() => {
+                        setEditingClass({ id: String(item.id), day: '', time: '', type: item.title as any, instructor: item.instructor, maxCapacity: item.capacity ?? 0, description: '', isRecurring: false, bookings: 0 });
+                        setDraft({ title: item.title ?? '', instructor: item.instructor ?? '', start_time: item.start_time, end_time: item.end_time, capacity: (item.capacity ?? '').toString() });
+                        setShowClassModal(true);
+                      }}
+                    >
+                      <Edit3 size={16} color={theme.colors.primary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.actionButton}
+                      onPress={() => handleDeleteReal(String(item.id), item.id)}
+                    >
+                      <Trash2 size={16} color={theme.colors.error} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
             </View>
-          );
-        })}
-      </ScrollView>
-    </View>
-  );
+          ))}
+        </ScrollView>
+      </View>
+    );
+  };
 
   const renderInstructorsTab = () => (
     <View style={styles.tabContent}>
       <View style={styles.tabHeader}>
         <Text style={styles.tabTitle}>Instructors</Text>
-        <TouchableOpacity 
-          style={styles.addButton}
-          onPress={() => {
-            resetNewInstructor();
-            setEditingInstructor(null);
-            setShowInstructorModal(true);
-          }}
-        >
-          <Plus size={20} color="white" />
-          <Text style={styles.addButtonText}>Add Instructor</Text>
-        </TouchableOpacity>
       </View>
-
       <ScrollView style={styles.instructorList} showsVerticalScrollIndicator={false}>
-        {instructors.map(instructor => (
-          <View key={instructor.id} style={styles.instructorCard}>
-            <View style={styles.instructorInfo}>
-              <Text style={styles.instructorName}>{instructor.name}</Text>
-              <Text style={styles.instructorEmail}>{instructor.email}</Text>
-              <Text style={styles.instructorPhone}>{instructor.phone}</Text>
-              <View style={styles.specialties}>
-                {instructor.specialties.map(specialty => (
-                  <View key={specialty} style={styles.specialtyTag}>
-                    <Text style={styles.specialtyText}>{specialty}</Text>
-                  </View>
-                ))}
-              </View>
-            </View>
-            <View style={styles.instructorActions}>
-              <TouchableOpacity 
-                style={styles.actionButton}
-                onPress={() => handleEditInstructor(instructor)}
-              >
-                <Edit3 size={16} color={theme.colors.primary} />
-              </TouchableOpacity>
-            </View>
-          </View>
-        ))}
+        <Text style={styles.comingSoonText}>Instructor directory will connect to your database next. No mock data here.</Text>
       </ScrollView>
     </View>
   );
@@ -788,99 +718,24 @@ function AdminContent() {
 
           <ScrollView style={styles.modalContent}>
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Day</Text>
-              <View style={styles.pickerContainer}>
-                {DAYS.map(day => (
-                  <TouchableOpacity
-                    key={day}
-                    style={[styles.pickerOption, newClass.day === day && styles.selectedOption]}
-                    onPress={() => setNewClass(prev => ({ ...prev, day }))}
-                  >
-                    <Text style={[styles.pickerText, newClass.day === day && styles.selectedText]}>
-                      {day.slice(0, 3)}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              <Text style={styles.label}>Title</Text>
+              <TextInput style={styles.textInput} value={draft.title} onChangeText={(t)=>setDraft({...draft, title: t})} placeholder="HOT 60" />
             </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Time</Text>
-              <View style={styles.pickerContainer}>
-                {TIMES.map(time => (
-                  <TouchableOpacity
-                    key={time}
-                    style={[styles.pickerOption, newClass.time === time && styles.selectedOption]}
-                    onPress={() => setNewClass(prev => ({ ...prev, time }))}
-                  >
-                    <Text style={[styles.pickerText, newClass.time === time && styles.selectedText]}>
-                      {time}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={styles.label}>Class Type</Text>
-              <View style={styles.typeContainer}>
-                <TouchableOpacity
-                  style={[styles.typeOption, newClass.type === 'Hot Yoga' && styles.selectedOption]}
-                  onPress={() => setNewClass(prev => ({ ...prev, type: 'Hot Yoga' }))}
-                >
-                  <Text style={[styles.typeText, newClass.type === 'Hot Yoga' && styles.selectedText]}>
-                    Hot Yoga
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.typeOption, newClass.type === 'Hot Pilates' && styles.selectedOption]}
-                  onPress={() => setNewClass(prev => ({ ...prev, type: 'Hot Pilates' }))}
-                >
-                  <Text style={[styles.typeText, newClass.type === 'Hot Pilates' && styles.selectedText]}>
-                    Hot Pilates
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
             <View style={styles.formGroup}>
               <Text style={styles.label}>Instructor</Text>
-              <View style={styles.pickerContainer}>
-                {instructors.map(instructor => (
-                  <TouchableOpacity
-                    key={instructor.id}
-                    style={[styles.instructorOption, newClass.instructor === instructor.name && styles.selectedOption]}
-                    onPress={() => setNewClass(prev => ({ ...prev, instructor: instructor.name }))}
-                  >
-                    <Text style={[styles.pickerText, newClass.instructor === instructor.name && styles.selectedText]}>
-                      {instructor.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              <TextInput style={styles.textInput} value={draft.instructor} onChangeText={(t)=>setDraft({...draft, instructor: t})} placeholder="Joanna Nostdal" />
             </View>
-
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Max Capacity</Text>
-              <TextInput
-                style={styles.textInput}
-                value={newClass.maxCapacity}
-                onChangeText={(text) => setNewClass(prev => ({ ...prev, maxCapacity: text }))}
-                keyboardType="numeric"
-                placeholder="20"
-              />
+              <Text style={styles.label}>Start (ISO)</Text>
+              <TextInput style={styles.textInput} value={draft.start_time} autoCapitalize="none" onChangeText={(t)=>setDraft({...draft, start_time: t})} placeholder="2025-08-27T18:00:00" />
             </View>
-
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Description (Optional)</Text>
-              <TextInput
-                style={[styles.textInput, styles.textArea]}
-                value={newClass.description}
-                onChangeText={(text) => setNewClass(prev => ({ ...prev, description: text }))}
-                placeholder="Class description..."
-                multiline
-                numberOfLines={3}
-              />
+              <Text style={styles.label}>End (ISO)</Text>
+              <TextInput style={styles.textInput} value={draft.end_time} autoCapitalize="none" onChangeText={(t)=>setDraft({...draft, end_time: t})} placeholder="2025-08-27T19:00:00" />
+            </View>
+            <View style={styles.formGroup}>
+              <Text style={styles.label}>Capacity</Text>
+              <TextInput style={styles.textInput} value={draft.capacity} keyboardType="numeric" onChangeText={(t)=>setDraft({...draft, capacity: t})} placeholder="24" />
             </View>
           </ScrollView>
 

@@ -147,6 +147,8 @@ export default function AccountScreen() {
   console.log('🔍 AccountScreen - Session:', session);
   console.log('🔍 AccountScreen - User role:', role);
   
+  const insets = useSafeAreaInsets();
+  
   // User is guaranteed to be authenticated at this point due to root layout
   if (!user) {
     console.log('❌ No user found in AccountScreen');
@@ -196,8 +198,6 @@ export default function AccountScreen() {
     
     return months;
   };
-
-  const insets = useSafeAreaInsets();
 
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { paddingTop: insets.top + 8 }] }>

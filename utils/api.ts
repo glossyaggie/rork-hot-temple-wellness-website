@@ -41,7 +41,7 @@ export interface Class {
 export interface Booking {
   id: string;
   user_id: string;
-  class_id: string;
+  class_id: string | number;
   status: 'booked' | 'cancelled' | 'attended' | 'no_show';
   created_at: string;
   updated_at: string;
@@ -169,12 +169,11 @@ export const getUserBookings = async (userId: string): Promise<Booking[]> => {
     `)
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
-    
   if (error) throw error;
   return data || [];
 };
 
-export const bookClass = async (userId: string, classId: string): Promise<Booking> => {
+export const bookClass = async (userId: string, classId: string | number): Promise<Booking> => {
   const { data, error } = await supabase
     .from('bookings')
     .insert({
@@ -184,9 +183,8 @@ export const bookClass = async (userId: string, classId: string): Promise<Bookin
     })
     .select()
     .single();
-    
   if (error) throw error;
-  return data;
+  return data as Booking;
 };
 
 export const cancelBooking = async (bookingId: string): Promise<void> => {
@@ -328,7 +326,7 @@ export type ActivePassSummary = {
 };
 
 export const summarizeActivePasses = (
-  passes: Array<{ id: string; pass_type?: string | null; remaining_credits?: number | null; expires_at?: string | null; is_active?: boolean | null }>,
+  passes: { id: string; pass_type?: string | null; remaining_credits?: number | null; expires_at?: string | null; is_active?: boolean | null }[],
   nowISO?: string
 ): ActivePassSummary => {
   const now = nowISO ? new Date(nowISO) : new Date();
@@ -465,7 +463,54 @@ export const confirmPayment = async (
 
 export const validateEnvironment = () => {
   console.log('✅ Environment validation: Using configured Supabase client');
-  return true; // Always return true since we're using hardcoded values
+  return true;
+};
+
+export type UpcomingClassBooking = {
+  booking_id: number;
+  class_id: number;
+  title: string;
+  instructor: string | null;
+  date: string; // YYYY-MM-DD
+  start_time: string; // e.g., '6:00 PM'
+  end_time: string;   // e.g., '7:00 PM'
+  created_at: string;
+};
+
+export const getUpcomingBookedClasses = async (userId: string): Promise<UpcomingClassBooking[]> => {
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const from = `${yyyy}-${mm}-${dd}`;
+
+  const { data, error } = await supabase
+    .from('class_bookings')
+    .select(`
+      id,
+      created_at,
+      class_schedule:class_id (id, title, instructor, date, start_time, end_time)
+    `)
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+
+  const rows = ((data ?? []) as unknown) as { id: number; created_at: string; class_schedule: { id: number; title: string | null; instructor: string | null; date: string; start_time: string; end_time: string } | null }[];
+  const upcoming = rows
+    .filter(r => r.class_schedule && r.class_schedule.date >= from)
+    .map<UpcomingClassBooking>((r) => ({
+      booking_id: r.id,
+      class_id: r.class_schedule!.id,
+      title: r.class_schedule!.title ?? 'Class',
+      instructor: r.class_schedule!.instructor ?? null,
+      date: r.class_schedule!.date,
+      start_time: r.class_schedule!.start_time,
+      end_time: r.class_schedule!.end_time,
+      created_at: r.created_at,
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+
+  return upcoming;
 };
 
 // Development helpers

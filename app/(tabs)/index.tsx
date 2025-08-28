@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,9 @@ import {
   FlatList,
   ImageBackground,
 } from 'react-native';
-import { User, Calendar, CreditCard, LogOut, Target, Flame, QrCode, Award, Gift, ChevronDown, Eye } from 'lucide-react-native';
+import { User, Calendar, CreditCard, LogOut, Target, Flame, QrCode, Award, Gift, ChevronDown, Eye, RefreshCcw } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { useAuth } from '@/hooks/useAuth';
-import { useBookings } from '@/hooks/useBookings';
 import { useHabitTracker } from '@/hooks/useHabitTracker';
 
 import PassPurchaseModal from '@/components/PassPurchaseModal';
@@ -20,6 +19,7 @@ import MyPassesCard from '@/components/MyPassesCard';
 import NotificationBanner from '@/components/NotificationBanner';
 import QRCodeScanner from '@/components/QRCodeScanner';
 import { router } from 'expo-router';
+import { getUpcomingBookedClasses, type UpcomingClassBooking } from '@/utils/api';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -49,10 +49,27 @@ export default function AccountScreen() {
 
   const { session, role, logout } = useAuth();
   const user = session?.user;
-  const { getUpcomingBookings } = useBookings();
   const { markAttendance, getAttendanceStreak, getTotalAttendance } = useHabitTracker();
 
-  const upcomingBookings = getUpcomingBookings();
+  const [upcomingBookings, setUpcomingBookings] = useState<UpcomingClassBooking[]>([]);
+  const [upcomingLoading, setUpcomingLoading] = useState<boolean>(false);
+  const [upcomingError, setUpcomingError] = useState<string | null>(null);
+
+  const loadUpcoming = async () => {
+    if (!user?.id) return;
+    try {
+      setUpcomingLoading(true);
+      setUpcomingError(null);
+      const items = await getUpcomingBookedClasses(user.id);
+      setUpcomingBookings(items);
+    } catch (e: any) {
+      setUpcomingError(e?.message ?? 'Failed to load');
+    } finally {
+      setUpcomingLoading(false);
+    }
+  };
+
+  useEffect(() => { loadUpcoming(); }, [user?.id]);
   const currentStreak = getAttendanceStreak();
   const totalClasses = getTotalAttendance();
 
@@ -261,16 +278,26 @@ export default function AccountScreen() {
 
         {/* Upcoming Bookings */}
         <View style={styles.bookingsSection}>
-          <Text style={styles.sectionTitle}>Your Upcoming Classes</Text>
-          {upcomingBookings.length > 0 ? (
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <Text style={styles.sectionTitle}>Your Upcoming Classes</Text>
+            <TouchableOpacity onPress={loadUpcoming} disabled={upcomingLoading} style={styles.refreshBtn} testID="refresh-upcoming">
+              <RefreshCcw size={16} color={upcomingLoading ? theme.colors.textLight : theme.colors.primary} />
+              <Text style={[styles.refreshText, { color: upcomingLoading ? theme.colors.textLight : theme.colors.primary }]}>Refresh</Text>
+            </TouchableOpacity>
+          </View>
+          {upcomingLoading ? (
+            <Text style={styles.noBookingsText}>Loading…</Text>
+          ) : upcomingError ? (
+            <Text style={[styles.noBookingsText, { color: theme.colors.error }]}>{upcomingError}</Text>
+          ) : upcomingBookings.length > 0 ? (
             <View style={styles.bookingsList}>
               {upcomingBookings.slice(0, 3).map((booking) => (
-                <View key={booking.id} style={styles.bookingCard}>
+                <View key={booking.booking_id} style={styles.bookingCard}>
                   <View style={styles.bookingInfo}>
                     <Text style={styles.bookingDate}>{formatDate(booking.date)}</Text>
-                    <Text style={styles.bookingTime}>{booking.time}</Text>
+                    <Text style={styles.bookingTime}>{booking.start_time} - {booking.end_time}</Text>
                   </View>
-                  <Text style={styles.bookingType}>{booking.classType}</Text>
+                  <Text style={styles.bookingType}>{booking.title}</Text>
                 </View>
               ))}
             </View>
@@ -804,6 +831,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
   },
+  refreshBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.border },
+  refreshText: { fontSize: 12, fontWeight: '600' },
   habitSection: {
     padding: theme.spacing.lg,
     backgroundColor: theme.colors.surface,

@@ -13,26 +13,40 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
 
   try {
-    const { priceId, quantity = 1, mode, successUrl, cancelUrl, metadata = {} } =
-      await req.json();
+    const {
+      priceId,
+      quantity = 1,
+      mode,
+      successUrl,
+      cancelUrl,
+      userId,
+      pass_type,
+      metadata = {},
+    } = await req.json();
 
-    if (!priceId || !mode || !successUrl || !cancelUrl) {
+    if (!priceId || !mode || !successUrl || !cancelUrl || !userId) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json', ...cors },
       });
     }
 
+    const mergedMeta: Record<string, string> = Object.fromEntries(
+      Object.entries({ ...metadata, userId, pass_type }).filter(([, v]) =>
+        typeof v !== 'undefined' && v !== null
+      ) as Array<[string, string]>,
+    );
+
     const basePayload: Record<string, unknown> = {
       mode,
       line_items: [{ price: priceId, quantity }],
       success_url: successUrl + '?session_id={CHECKOUT_SESSION_ID}',
       cancel_url: cancelUrl,
-      metadata,
+      metadata: mergedMeta,
     };
 
     if (mode === 'subscription') {
-      (basePayload as any).subscription_data = { metadata };
+      (basePayload as any).subscription_data = { metadata: mergedMeta };
     }
 
     const session = await stripe.checkout.sessions.create(basePayload as any);

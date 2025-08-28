@@ -23,13 +23,19 @@ Deno.serve(async (req) => {
       });
     }
 
-    const session = await stripe.checkout.sessions.create({
+    const basePayload: Record<string, unknown> = {
       mode,
       line_items: [{ price: priceId, quantity }],
       success_url: successUrl + '?session_id={CHECKOUT_SESSION_ID}',
       cancel_url: cancelUrl,
       metadata,
-    });
+    };
+
+    if (mode === 'subscription') {
+      (basePayload as any).subscription_data = { metadata };
+    }
+
+    const session = await stripe.checkout.sessions.create(basePayload as any);
 
     return new Response(
       JSON.stringify({ url: session.url, sessionId: session.id }),

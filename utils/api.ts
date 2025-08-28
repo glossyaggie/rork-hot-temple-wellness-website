@@ -436,20 +436,32 @@ export const openCheckout = async (checkoutUrl: string): Promise<string | null> 
   }
 };
 
-export const confirmPayment = async (sessionId: string): Promise<{ ok: boolean }> => {
+export const confirmPayment = async (
+  sessionId: string
+): Promise<{ ok: boolean; error?: string }> => {
   try {
     const { data: { user } } = await supabase.auth.getUser();
     const userId = user?.id ?? null;
     if (!userId) {
       console.warn('confirmPayment: No authenticated user');
-      return { ok: false };
+      return { ok: false, error: 'not_authenticated' };
     }
-    const { data, error } = await supabase.functions.invoke('confirm-payment', { body: { sessionId, userId } });
-    if (error) throw error as any;
+    const { data, error } = await supabase.functions.invoke('confirm-payment', {
+      body: { sessionId, userId },
+    });
+    if (error) {
+      console.warn('confirmPayment non-2xx from Edge Function', error?.message ?? String(error));
+      return { ok: false, error: error?.message ?? 'edge_function_non_2xx' };
+    }
     return { ok: Boolean((data as any)?.ok ?? true) };
-  } catch (e) {
-    console.error('confirmPayment error', e);
-    return { ok: false };
+  } catch (e: any) {
+    const msg = e?.message ?? String(e);
+    if (msg.includes('FunctionsHttpError') || msg.includes('Edge Function returned a non-2xx')) {
+      console.warn('confirmPayment ignored Edge Function error (webhook will credit):', msg);
+      return { ok: false, error: 'edge_function_non_2xx' };
+    }
+    console.warn('confirmPayment unexpected error', msg);
+    return { ok: false, error: msg };
   }
 };
 

@@ -400,6 +400,8 @@ export type CreateCheckoutPayload = {
   metadata?: Record<string, string | number | boolean | null>;
   successUrl: string;
   cancelUrl: string;
+  userId: string;
+  pass_type?: string;
 };
 
 export const createCheckout = async (payload: CreateCheckoutPayload): Promise<{ url: string; sessionId: string } | null> => {

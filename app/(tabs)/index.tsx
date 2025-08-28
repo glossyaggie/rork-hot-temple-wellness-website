@@ -134,14 +134,10 @@ export default function AccountScreen() {
 
   const getPassStatusText = () => {
     if (!user) return '';
-    
-    // TODO: Implement pass status based on user_passes table
-    // For now, show role-based status
     if (role === 'admin' || role === 'instructor') {
-      return 'Staff Access - Unlimited';
+      return 'Staff Access';
     }
-    
-    return 'No active pass';
+    return '';
   };
 
   // Debug: Log user state
@@ -218,20 +214,22 @@ export default function AccountScreen() {
             </TouchableOpacity>
           </View>
 
-          <View style={styles.passInfo}>
-            <CreditCard size={20} color={theme.colors.primary} />
-            <Text style={styles.passText}>{getPassStatusText()}</Text>
-            {role === 'admin' && (
-              <View style={styles.vipBadge}>
-                <Text style={styles.vipBadgeText}>ADMIN</Text>
-              </View>
-            )}
-            {role === 'instructor' && (
-              <View style={[styles.vipBadge, { backgroundColor: '#4ECDC4' }]}>
-                <Text style={styles.vipBadgeText}>STAFF</Text>
-              </View>
-            )}
-          </View>
+          {getPassStatusText() ? (
+            <View style={styles.passInfo}>
+              <CreditCard size={20} color={theme.colors.primary} />
+              <Text style={styles.passText}>{getPassStatusText()}</Text>
+              {role === 'admin' && (
+                <View style={styles.vipBadge}>
+                  <Text style={styles.vipBadgeText}>ADMIN</Text>
+                </View>
+              )}
+              {role === 'instructor' && (
+                <View style={[styles.vipBadge, { backgroundColor: '#4ECDC4' }]}>
+                  <Text style={styles.vipBadgeText}>STAFF</Text>
+                </View>
+              )}
+            </View>
+          ) : null}
 
           <View style={styles.actionButtons}>
             <TouchableOpacity

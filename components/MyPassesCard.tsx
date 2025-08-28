@@ -78,22 +78,16 @@ export default function MyPassesCard({ onRefetchDone }: Props) {
 
           {Array.isArray(passes) && passes.length > 0 ? (
             <View style={{ marginTop: 8 }}>
-              {passes.map((p) => {
+              {passes.filter(p => (p.remaining_credits == null)).map((p) => {
                 const active = p.is_active ?? false;
                 const exp = p.expires_at ? new Date(p.expires_at) : null;
                 const expired = exp ? exp < new Date() : false;
-                const isUnlimitedPass = p.remaining_credits == null;
                 const metaParts: string[] = [];
-                if (isUnlimitedPass) {
-                  if (exp) metaParts.push(`${expired ? 'expired' : 'expires'} ${exp.toLocaleDateString()}`);
-                  if (active === false) metaParts.push('inactive');
-                } else {
-                  if (exp) metaParts.push(`${expired ? 'expired' : 'expires'} ${exp.toLocaleDateString()}`);
-                  if (active === false) metaParts.push('inactive');
-                }
+                if (exp) metaParts.push(`${expired ? 'expired' : 'expires'} ${exp.toLocaleDateString()}`);
+                if (active === false) metaParts.push('inactive');
                 return (
                   <View key={p.id} style={styles.passRow}>
-                    <Text style={styles.passType}>{p.pass_type ?? 'Pass'}</Text>
+                    <Text style={styles.passType}>{p.pass_type ?? 'Unlimited pass'}</Text>
                     {metaParts.length > 0 ? (
                       <Text style={styles.passMeta}>{metaParts.join(' · ')}</Text>
                     ) : null}

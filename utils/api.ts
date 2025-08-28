@@ -2,6 +2,7 @@
 import { supabase } from '@/lib/supabase';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
+import * as Linking from 'expo-linking';
 
 console.log('🔧 API utils loaded with Supabase client');
 
@@ -413,15 +414,23 @@ export const createCheckout = async (payload: CreateCheckoutPayload): Promise<{ 
   }
 };
 
-export const openCheckout = async (checkoutUrl: string): Promise<void> => {
+export const openCheckout = async (checkoutUrl: string): Promise<string | null> => {
   try {
     if (Platform.OS === 'web') {
-      window.open(checkoutUrl, '_blank');
-      return;
+      if (typeof window !== 'undefined') {
+        window.location.href = checkoutUrl;
+      }
+      return null;
     }
-    await WebBrowser.openBrowserAsync(checkoutUrl);
+    const returnUrl = Linking.createURL('/checkout/success');
+    const result = await WebBrowser.openAuthSessionAsync(checkoutUrl, returnUrl);
+    if (result.type === 'success' && result.url) {
+      return result.url;
+    }
+    return null;
   } catch (e) {
     console.error('openCheckout error', e);
+    return null;
   }
 };
 

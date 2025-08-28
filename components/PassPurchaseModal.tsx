@@ -5,6 +5,7 @@ import { theme } from '@/constants/theme';
 import { Pass } from '@/types';
 import { priceMap as globalPriceMap, PriceMap } from '@/lib/prices';
 import { createCheckout, openCheckout, confirmPayment } from '@/utils/api';
+import { Platform } from 'react-native';
 
 const PASSES: ReadonlyArray<Pass> = [
   { id: 'single', name: 'Single Class', price: 0, credits: 1, description: 'Perfect for trying us out', isUnlimited: false },
@@ -43,13 +44,21 @@ export default function PassPurchaseModal({ visible, onClose, onSuccess, priceMa
       }
       setSelectedId(pass.id);
       setLoading(true);
+      const appReturnNative = (Platform.OS !== 'web') ? require('expo-linking').createURL('/checkout/success?status=success&session_id={CHECKOUT_SESSION_ID}') : null;
+      const webOrigin = (typeof window !== 'undefined' && window.location?.origin) ? window.location.origin : 'https://app.example.com';
+      const successUrl = Platform.OS === 'web'
+        ? `${webOrigin}/?status=success&session_id={CHECKOUT_SESSION_ID}`
+        : String(appReturnNative);
+      const cancelUrl = Platform.OS === 'web'
+        ? `${webOrigin}/?status=cancel`
+        : require('expo-linking').createURL('/checkout/cancel');
       const payload = {
         priceId: String(priceId),
         quantity: 1,
         mode: pass.isUnlimited ? 'subscription' : 'payment',
         metadata: { pass_id: pass.id },
-        successUrl: `${window?.location?.origin ?? 'https://app.example.com'}/?status=success`,
-        cancelUrl: `${window?.location?.origin ?? 'https://app.example.com'}/?status=cancel`,
+        successUrl,
+        cancelUrl,
       } as const;
       const session = await createCheckout(payload);
       if (!session) {
@@ -59,7 +68,27 @@ export default function PassPurchaseModal({ visible, onClose, onSuccess, priceMa
         return;
       }
       setLastSessionId(session.sessionId);
-      await openCheckout(session.url);
+      const redirectUrl = await openCheckout(session.url);
+      if (redirectUrl) {
+        try {
+          const urlObj = new URL(redirectUrl);
+          const sid = urlObj.searchParams.get('session_id');
+          const sidFinal = sid ?? session.sessionId;
+          if (sidFinal) {
+            const res = await confirmPayment(sidFinal);
+            if (res.ok) {
+              onSuccess('Purchase confirmed');
+              onClose();
+              return;
+            }
+          }
+        } catch (err) {
+          console.log('parse return url error', err);
+        }
+      }
+      if (Platform.OS === 'web') {
+        onSuccess('Complete your payment in the opened tab, then return — we will auto-confirm on next app focus.');
+      }
     } catch (e) {
       onSuccess('Failed to open checkout.');
     } finally {
@@ -77,7 +106,7 @@ export default function PassPurchaseModal({ visible, onClose, onSuccess, priceMa
     const res = await confirmPayment(lastSessionId);
     setLoading(false);
     if (res.ok) {
-      onSuccess('Payment confirmed. Pass updated!');
+      onSuccess('Purchase confirmed');
       onClose();
     } else {
       onSuccess('Payment not found yet. If you completed checkout, try again in a few seconds.');

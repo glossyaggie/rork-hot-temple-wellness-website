@@ -71,7 +71,7 @@ function formatHeaderFromDateKey(key: string): string {
 }
 
 export default function ScheduleScreen() {
-  const { role } = useAuth();
+  const { role, user } = useAuth();
   const isAdmin = role === 'admin';
   const insets = useSafeAreaInsets();
 
@@ -101,6 +101,7 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
   const [draft, setDraft] = useState<{ title: string; instructor: string; start_time: string; end_time: string; capacity: string }>({ title: '', instructor: '', start_time: '', end_time: '', capacity: '' });
 
   const [purchaseOpen, setPurchaseOpen] = useState<boolean>(false);
+  const [bookingState, setBookingState] = useState<Record<number, 'idle' | 'booking' | 'booked'>>({});
 
   const allDays = useMemo(() => {
     const days: Date[] = [];
@@ -359,30 +360,42 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
                   )}
                 </View>
                 <TouchableOpacity
-                  style={styles.bookBtn}
+                  style={[
+                    styles.bookBtn,
+                    bookingState[c.id] === 'booked' ? styles.bookBtnBooked : undefined,
+                    bookingState[c.id] === 'booking' ? styles.bookBtnLoading : undefined,
+                  ]}
+                  disabled={bookingState[c.id] === 'booking' || bookingState[c.id] === 'booked'}
                   testID={`book-${c.id}`}
                   onPress={async () => {
                     try {
-                      const uid = useAuth().user?.id;
+                      const uid = user?.id;
                       if (!uid) {
                         Alert.alert('Please sign in to book');
                         return;
                       }
+                      setBookingState((s) => ({ ...s, [c.id]: 'booking' }));
                       const res = await bookWithEligibility(uid, c.id);
                       if (res.booked) {
-                        Alert.alert('Booked', 'You are booked in!');
+                        setBookingState((s) => ({ ...s, [c.id]: 'booked' }));
+                        Alert.alert('Booked in!', `${c.title} • ${c.start_time} - ${c.end_time}`);
                       } else if (res.reason === 'no_pass') {
+                        setBookingState((s) => ({ ...s, [c.id]: 'idle' }));
                         setPurchaseOpen(true);
                       } else {
+                        setBookingState((s) => ({ ...s, [c.id]: 'idle' }));
                         Alert.alert('Not booked', res.reason ?? 'Try again');
                       }
                     } catch (e) {
+                      setBookingState((s) => ({ ...s, [c.id]: 'idle' }));
                       Alert.alert('Error', 'Could not book, please try again.');
                     }
                   }}
                 >
                   <TicketCheck size={16} color={'#fff'} />
-                  <Text style={styles.bookBtnText}>Book me in</Text>
+                  <Text style={styles.bookBtnText}>
+                    {bookingState[c.id] === 'booked' ? 'Booked in!' : bookingState[c.id] === 'booking' ? 'Booking…' : 'Book me in'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             );
@@ -679,6 +692,8 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: 8 },
   iconBtn: { padding: 6 },
   bookBtn: { marginTop: 12, backgroundColor: theme.colors.primary, borderRadius: 12, paddingVertical: 10, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
+  bookBtnBooked: { backgroundColor: '#10B981' },
+  bookBtnLoading: { opacity: 0.7 },
   bookBtnText: { color: '#fff', fontWeight: '700' },
   noClassesContainer: { padding: theme.spacing.xl, alignItems: 'center' },
   noClassesText: { color: theme.colors.textSecondary, textAlign: 'center' },

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { theme } from '@/constants/theme';
 import { fetchMyPasses, summarizeActivePasses, type UserPass } from '@/utils/api';
+import { onPassesChanged } from '@/utils/events';
 import { supabase } from '@/lib/supabase';
 import { useFocusEffect } from 'expo-router';
 import { Ticket, RefreshCcw } from 'lucide-react-native';
@@ -34,6 +35,11 @@ export default function MyPassesCard({ onRefetchDone }: Props) {
 
   useEffect(() => {
     load();
+    const off = onPassesChanged(() => {
+      console.log('🔁 MyPassesCard event: passes changed');
+      load();
+    });
+    return () => { try { off(); } catch {} };
   }, [load]);
 
   useFocusEffect(

@@ -20,6 +20,7 @@ import NotificationBanner from '@/components/NotificationBanner';
 import QRCodeScanner from '@/components/QRCodeScanner';
 import { router, useFocusEffect } from 'expo-router';
 import { getUpcomingBookedClasses, type UpcomingClassBooking } from '@/utils/api';
+import { onBookingsChanged } from '@/utils/events';
 
 const MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -69,7 +70,14 @@ export default function AccountScreen() {
     }
   };
 
-  useEffect(() => { loadUpcoming(); }, [user?.id]);
+  useEffect(() => { 
+    loadUpcoming(); 
+    const off = onBookingsChanged(() => {
+      console.log('🔁 AccountScreen event: bookings changed');
+      loadUpcoming();
+    });
+    return () => { try { off(); } catch {} };
+  }, [user?.id]);
   useFocusEffect(
     useCallback(() => {
       console.log('🔁 AccountScreen focus: reload upcoming');
@@ -298,7 +306,7 @@ export default function AccountScreen() {
             <Text style={[styles.noBookingsText, { color: theme.colors.error }]}>{upcomingError}</Text>
           ) : upcomingBookings.length > 0 ? (
             <View style={styles.bookingsList}>
-              {upcomingBookings.slice(0, 3).map((booking) => (
+              {upcomingBookings.map((booking) => (
                 <View key={booking.booking_id} style={styles.bookingCard}>
                   <View style={styles.bookingInfo}>
                     <Text style={styles.bookingDate}>{formatDate(booking.date)}</Text>

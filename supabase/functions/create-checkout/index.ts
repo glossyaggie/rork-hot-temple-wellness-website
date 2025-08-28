@@ -13,6 +13,7 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: cors });
 
   try {
+    const body = await req.json();
     const {
       priceId,
       quantity = 1,
@@ -22,9 +23,9 @@ Deno.serve(async (req) => {
       userId,
       pass_type,
       metadata = {},
-    } = await req.json();
+    } = body ?? {};
 
-    if (!priceId || !mode || !successUrl || !cancelUrl || !userId) {
+    if (!priceId || !mode || !successUrl || !cancelUrl) {
       return new Response(JSON.stringify({ error: 'Missing required fields' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json', ...cors },
@@ -45,10 +46,13 @@ Deno.serve(async (req) => {
       metadata: mergedMeta,
     });
 
+    const successWithSession =
+      String(successUrl) + (String(successUrl).includes('?') ? '&' : '?') + 'session_id={CHECKOUT_SESSION_ID}';
+
     const basePayload: Record<string, unknown> = {
       mode,
       line_items: [{ price: priceId, quantity }],
-      success_url: successUrl + '?session_id={CHECKOUT_SESSION_ID}',
+      success_url: successWithSession,
       cancel_url: cancelUrl,
       metadata: mergedMeta,
       client_reference_id: String(userId ?? ''),

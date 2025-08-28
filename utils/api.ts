@@ -1,4 +1,3 @@
-// Import the configured supabase client
 import { supabase } from '@/lib/supabase';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
@@ -6,7 +5,6 @@ import * as Linking from 'expo-linking';
 
 console.log('🔧 API utils loaded with Supabase client');
 
-// Database types
 export interface User {
   id: string;
   email: string;
@@ -17,15 +15,14 @@ export interface User {
   updated_at: string;
 }
 
-export interface UserPass {
+export type UserPass = {
   id: string;
-  user_id: string;
-  pass_type: 'single' | 'pack_5' | 'pack_10' | 'unlimited';
-  remaining_credits?: number;
-  expires_at?: string;
-  created_at: string;
-  is_active: boolean;
-}
+  pass_type: string | null;
+  remaining_credits: number | null;
+  expires_at: string | null;
+  is_active: boolean | null;
+  created_at: string | null;
+};
 
 export interface Class {
   id: string;
@@ -131,18 +128,23 @@ export const signOut = async () => {
   if (error) throw error;
 };
 
-// API functions
-export const getUserPasses = async (userId: string): Promise<UserPass[]> => {
+export async function fetchMyPasses(): Promise<UserPass[]> {
   const { data, error } = await supabase
     .from('user_passes')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('is_active', true)
-    .order('created_at', { ascending: false });
-    
+    .select('id, pass_type, remaining_credits, expires_at, is_active, created_at')
+    .order('created_at', { ascending: false })
+    .limit(50);
   if (error) throw error;
-  return data || [];
-};
+  return data ?? [];
+}
+
+export function computeActiveStatus(p: UserPass) {
+  const active = !!p.is_active;
+  const hasCredits = (p.remaining_credits ?? 0) > 0;
+  const validUntil = p.expires_at ? new Date(p.expires_at) : null;
+  const notExpired = !validUntil || validUntil > new Date();
+  return active && (hasCredits || notExpired);
+}
 
 export const getClasses = async (): Promise<Class[]> => {
   const { data, error } = await supabase
@@ -446,20 +448,16 @@ export const confirmPayment = async (
       console.warn('confirmPayment: No authenticated user');
       return { ok: false, error: 'not_authenticated' };
     }
-    const { data, error } = await supabase.functions.invoke('confirm-payment', {
-      body: { sessionId, userId },
-    });
-    if (error) {
-      console.warn('confirmPayment non-2xx from Edge Function', error?.message ?? String(error));
-      return { ok: false, error: error?.message ?? 'edge_function_non_2xx' };
-    }
-    return { ok: Boolean((data as any)?.ok ?? true) };
-  } catch (e: any) {
-    const msg = e?.message ?? String(e);
-    if (msg.includes('FunctionsHttpError') || msg.includes('Edge Function returned a non-2xx')) {
-      console.warn('confirmPayment ignored Edge Function error (webhook will credit):', msg);
+    try {
+      const { data, error } = await supabase.functions.invoke('confirm-payment', { body: { sessionId, userId } });
+      if (error) throw error;
+      return { ok: Boolean((data as any)?.ok ?? true) };
+    } catch (err: any) {
+      console.warn('confirmPayment non-2xx ignored (webhook is source of truth):', err?.message ?? String(err));
       return { ok: false, error: 'edge_function_non_2xx' };
     }
+  } catch (e: any) {
+    const msg = e?.message ?? String(e);
     console.warn('confirmPayment unexpected error', msg);
     return { ok: false, error: msg };
   }

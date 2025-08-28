@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
     const event = await stripe.webhooks.constructEventAsync(payload, signature, STRIPE_WEBHOOK_SECRET);
 
     if (event.type === 'checkout.session.completed') {
-      const session = event.data.object as Stripe.Checkout.Session;
+      const session = event.data.object as any;
       const full = await stripe.checkout.sessions.retrieve(session.id, { expand: ['line_items.data.price', 'subscription'] });
 
       const userId = (full.metadata?.userId ?? full.client_reference_id ?? '') as string;
@@ -142,7 +142,7 @@ Deno.serve(async (req) => {
     }
 
     if (event.type === 'invoice.payment_succeeded') {
-      const invoice = event.data.object as Stripe.Invoice;
+      const invoice = event.data.object as any;
 
       let userId = (invoice.metadata?.userId ?? '') as string;
       let passTypeMeta = (invoice.metadata?.pass_type ?? '') as string;
@@ -153,7 +153,7 @@ Deno.serve(async (req) => {
         const sub = await stripe.subscriptions.retrieve(subId, { expand: ['items.data.price'] });
         userId = userId || (sub.metadata?.userId as string || '');
         passTypeMeta = passTypeMeta || (sub.metadata?.pass_type as string || '');
-        priceId = (sub.items?.data?.[0]?.price as Stripe.Price | undefined)?.id;
+        priceId = (sub.items?.data?.[0]?.price as any | undefined)?.id;
       }
 
       if (!userId) {

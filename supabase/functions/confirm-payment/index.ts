@@ -17,7 +17,7 @@ const cors = {
 const priceMap: Record<string, { pass_type: string; credits?: number; durationDays?: number; mode: 'payment' | 'subscription' }>
 = {
   'price_1S0r9bARpqh0Ut1y4lHGGuAT': { pass_type: 'single',     credits: 1,  mode: 'payment' },
-  'price_1S0rGpARpqh0Ut1yYrnt5R6V': { pass_type: '5-class',    credits: 5,  mode: 'payment' },
+  'price_1S0vfBARpqh0Ut1ybKjeqehJ': { pass_type: '5-class',    credits: 5,  mode: 'payment' },
   'price_1S0rHLARpqh0Ut1ybWGa3ocf': { pass_type: '10-class',   credits: 10, mode: 'payment' },
   'price_1S0rHqARpqh0Ut1ygGGaoqac': { pass_type: '25-class',   credits: 25, mode: 'payment' },
   'price_1S0rIRARpqh0Ut1yQkmz18xc': { pass_type: 'weekly-unlimited',   durationDays: 7,   mode: 'subscription' },

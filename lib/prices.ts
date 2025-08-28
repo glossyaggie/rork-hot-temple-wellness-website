@@ -11,7 +11,7 @@ export type PriceMap = {
 
 export const priceMap: PriceMap = {
   single: 'price_1S0r9bARpqh0Ut1y4lHGGuAT',
-  '5-class': 'price_1S0rGpARpqh0Ut1yYrnt5R6V',
+  '5-class': 'price_1S0vfBARpqh0Ut1ybKjeqehJ',
   '10-class': 'price_1S0rHLARpqh0Ut1ybWGa3ocf',
   '25-class': 'price_1S0rHqARpqh0Ut1ygGGaoqac',
   'weekly-unlimited': 'price_1S0rIRARpqh0Ut1yQkmz18xc',

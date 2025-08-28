@@ -32,10 +32,18 @@ Deno.serve(async (req) => {
     }
 
     const mergedMeta: Record<string, string> = Object.fromEntries(
-      Object.entries({ ...metadata, userId, pass_type }).filter(([, v]) =>
-        typeof v !== 'undefined' && v !== null
-      ) as Array<[string, string]>,
+      Object.entries({ ...metadata, userId, pass_type })
+        .filter(([, v]) => typeof v !== 'undefined' && v !== null)
+        .map(([k, v]) => [k, String(v)]) as Array<[string, string]>,
     );
+
+    console.log('create-checkout received', {
+      priceId,
+      mode,
+      userId,
+      pass_type,
+      metadata: mergedMeta,
+    });
 
     const basePayload: Record<string, unknown> = {
       mode,
@@ -51,11 +59,14 @@ Deno.serve(async (req) => {
 
     const session = await stripe.checkout.sessions.create(basePayload as any);
 
+    console.log('create-checkout session created', { sessionId: session.id, hasMetadata: !!session.metadata, metadataKeys: Object.keys(session.metadata ?? {}) });
+
     return new Response(
       JSON.stringify({ url: session.url, sessionId: session.id }),
       { headers: { 'Content-Type': 'application/json', ...cors } },
     );
   } catch (err) {
+    console.error('create-checkout error', err);
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
       headers: { 'Content-Type': 'application/json', ...cors },

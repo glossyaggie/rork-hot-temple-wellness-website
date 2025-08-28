@@ -118,9 +118,16 @@ Deno.serve(async (req) => {
 
       const fullSession = await stripe.checkout.sessions.retrieve(sessionId, { expand: ['line_items.data.price', 'subscription'] });
 
-      const userId: string | undefined = (fullSession.metadata && (fullSession.metadata.userId as string)) ?? undefined;
+      let userId: string | undefined = (fullSession.metadata && (fullSession.metadata.userId as string)) ?? undefined;
       if (!userId) {
-        return new Response(JSON.stringify({ error: 'Missing userId in metadata' }), { status: 200, headers: { 'Content-Type': 'application/json', ...cors } });
+        userId = (fullSession.client_reference_id as string | undefined) ?? undefined;
+      }
+      if (!userId && fullSession.mode === 'payment' && fullSession.payment_intent) {
+        const pi = await stripe.paymentIntents.retrieve(fullSession.payment_intent as string);
+        userId = (pi.metadata?.userId as string | undefined) ?? userId;
+      }
+      if (!userId) {
+        return new Response(JSON.stringify({ error: 'Missing userId after fallbacks' }), { status: 200, headers: { 'Content-Type': 'application/json', ...cors } });
       }
 
       const priceId = (fullSession as any).line_items?.data?.[0]?.price?.id ?? (fullSession as any).line_items?.data?.[0]?.price;

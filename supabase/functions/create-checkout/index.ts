@@ -51,10 +51,13 @@ Deno.serve(async (req) => {
       success_url: successUrl + '?session_id={CHECKOUT_SESSION_ID}',
       cancel_url: cancelUrl,
       metadata: mergedMeta,
+      client_reference_id: String(userId ?? ''),
     };
 
     if (mode === 'subscription') {
       (basePayload as any).subscription_data = { metadata: mergedMeta };
+    } else {
+      (basePayload as any).payment_intent_data = { metadata: mergedMeta };
     }
 
     const session = await stripe.checkout.sessions.create(basePayload as any);

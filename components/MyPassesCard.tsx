@@ -95,9 +95,7 @@ export default function MyPassesCard({ onRefetchDone }: Props) {
                 );
               })}
             </View>
-          ) : (
-            <Text style={styles.valueMuted}>No passes yet</Text>
-          )}
+          ) : null}
         </View>
       )}
     </View>

@@ -372,45 +372,46 @@ export const bookWithEligibility = async (
     const summary = summarizeActivePasses(passes ?? []);
 
     const payload = { userId, classId, useCreditPassId: summary.hasUnlimited ? null : summary.creditPassId };
-    try {
-      const { data: result, error: fnErr } = await supabase.functions.invoke('book-class', { body: payload });
-      if (fnErr) throw fnErr as any;
-      if ((result as any)?.ok) {
-        const usedCredit = Boolean((result as any)?.usedCredit ?? false);
-        const remainingCredits = (result as any)?.remainingCredits as number | undefined;
-        try { emitBookingsChanged(); } catch {}
-        if (usedCredit) { try { emitPassesChanged(); } catch {} }
-        return { booked: true, usedCredit, remainingCredits };
+
+    const { data: result, error: fnErr } = await supabase.functions.invoke('book-class', { body: payload });
+    if (!fnErr && (result as any)?.ok) {
+      const usedCredit = Boolean((result as any)?.usedCredit ?? false);
+      const remainingCredits = (result as any)?.remainingCredits as number | undefined;
+      try { emitBookingsChanged(); } catch {}
+      try { emitPassesChanged(); } catch {}
+      return { booked: true, usedCredit, remainingCredits };
+    }
+
+    console.warn('bookWithEligibility: edge failed or responded not ok, falling back', (fnErr as any)?.message ?? (result as any)?.error ?? 'unknown');
+
+    if (summary.hasUnlimited) {
+      const { error: bookErr } = await supabase
+        .from('class_bookings')
+        .insert({ user_id: userId, class_id: classId });
+      if (bookErr) throw bookErr;
+      try { emitBookingsChanged(); } catch {}
+      try { emitPassesChanged(); } catch {}
+      return { booked: true, usedCredit: false };
+    }
+
+    if (summary.totalCredits > 0) {
+      const passId = summary.creditPassId;
+      const { error: bookErr } = await supabase
+        .from('class_bookings')
+        .insert({ user_id: userId, class_id: classId });
+      if (bookErr) throw bookErr;
+      if (passId) {
+        const target = (passes ?? []).find((p: any) => p.id === passId);
+        const newRemaining = Math.max(0, ((target?.remaining_credits ?? summary.totalCredits) - 1));
+        const { error: decErr } = await supabase
+          .from('user_passes')
+          .update({ remaining_credits: newRemaining, is_active: newRemaining > 0 })
+          .eq('id', passId);
+        if (decErr) console.warn('fallback dec credits error', decErr.message);
       }
-    } catch (edgeErr) {
-      console.warn('bookWithEligibility: edge function fallback', (edgeErr as any)?.message ?? String(edgeErr));
-      if (summary.hasUnlimited) {
-        const { error: bookErr } = await supabase
-          .from('class_bookings')
-          .insert({ user_id: userId, class_id: classId });
-        if (bookErr) throw bookErr;
-        try { emitBookingsChanged(); } catch {}
-        return { booked: true };
-      }
-      if (summary.totalCredits > 0) {
-        const passId = summary.creditPassId;
-        const { error: bookErr } = await supabase
-          .from('class_bookings')
-          .insert({ user_id: userId, class_id: classId });
-        if (bookErr) throw bookErr;
-        if (passId) {
-          const target = (passes ?? []).find((p: any) => p.id === passId);
-          const newRemaining = Math.max(0, ((target?.remaining_credits ?? summary.totalCredits) - 1));
-          const { error: decErr } = await supabase
-            .from('user_passes')
-            .update({ remaining_credits: newRemaining, is_active: newRemaining > 0 })
-            .eq('id', passId);
-          if (decErr) console.warn('fallback dec credits error', decErr.message);
-          try { emitPassesChanged(); } catch {}
-        }
-        try { emitBookingsChanged(); } catch {}
-        return { booked: true };
-      }
+      try { emitPassesChanged(); } catch {}
+      try { emitBookingsChanged(); } catch {}
+      return { booked: true, usedCredit: true };
     }
 
     return { booked: false, reason: 'no_pass' };

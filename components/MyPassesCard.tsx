@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { theme } from '@/constants/theme';
 import { fetchMyPasses, summarizeActivePasses, type UserPass } from '@/utils/api';
 import { supabase } from '@/lib/supabase';
+import { useFocusEffect } from 'expo-router';
 import { Ticket, RefreshCcw } from 'lucide-react-native';
 
 interface Props {
@@ -14,7 +15,7 @@ export default function MyPassesCard({ onRefetchDone }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [passes, setPasses] = useState<UserPass[] | null>(null);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -29,11 +30,19 @@ export default function MyPassesCard({ onRefetchDone }: Props) {
       setLoading(false);
       onRefetchDone?.();
     }
-  };
+  }, [onRefetchDone]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
+
+  useFocusEffect(
+    useCallback(() => {
+      console.log('🔁 MyPassesCard focus: reloading passes');
+      load();
+      return () => {};
+    }, [load])
+  );
 
   const summary = useMemo(() => summarizeActivePasses(passes ?? []), [passes]);
 

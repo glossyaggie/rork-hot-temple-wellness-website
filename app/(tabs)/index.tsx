@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -18,7 +18,7 @@ import HabitCalendar from '@/components/HabitCalendar';
 import MyPassesCard from '@/components/MyPassesCard';
 import NotificationBanner from '@/components/NotificationBanner';
 import QRCodeScanner from '@/components/QRCodeScanner';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { getUpcomingBookedClasses, type UpcomingClassBooking } from '@/utils/api';
 
 const MONTHS = [
@@ -70,6 +70,13 @@ export default function AccountScreen() {
   };
 
   useEffect(() => { loadUpcoming(); }, [user?.id]);
+  useFocusEffect(
+    useCallback(() => {
+      console.log('🔁 AccountScreen focus: reload upcoming');
+      loadUpcoming();
+      return () => {};
+    }, [user?.id])
+  );
   const currentStreak = getAttendanceStreak();
   const totalClasses = getTotalAttendance();
 

@@ -129,9 +129,13 @@ export const signOut = async () => {
 };
 
 export async function fetchMyPasses(): Promise<UserPass[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  const userId = user?.id ?? null;
+  if (!userId) return [];
   const { data, error } = await supabase
     .from('user_passes')
     .select('id, pass_type, remaining_credits, expires_at, is_active, created_at')
+    .eq('user_id', userId)
     .order('created_at', { ascending: false })
     .limit(50);
   if (error) throw error;
@@ -483,10 +487,10 @@ export type UpcomingClassBooking = {
 };
 
 export const getUpcomingBookedClasses = async (userId: string): Promise<UpcomingClassBooking[]> => {
-  const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, '0');
-  const dd = String(today.getDate()).padStart(2, '0');
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
   const from = `${yyyy}-${mm}-${dd}`;
 
   const { data, error } = await supabase
@@ -499,9 +503,30 @@ export const getUpcomingBookedClasses = async (userId: string): Promise<Upcoming
   if (error) throw error;
 
   const rows = ((data ?? []) as unknown) as { id: number; class_schedule: { id: number; title: string | null; instructor: string | null; date: string; start_time: string; end_time: string } | null }[];
+
+  const toMin = (s: string) => {
+    const parts = s.trim().split(' ');
+    const t = parts[0] ?? '';
+    const ampm = (parts[1] ?? '').toUpperCase();
+    const hm = t.split(':');
+    let h = Number(hm[0] ?? 0);
+    const m = Number(hm[1] ?? 0);
+    if (ampm === 'PM' && h !== 12) h += 12;
+    if (ampm === 'AM' && h === 12) h = 0;
+    return h * 60 + m;
+  };
+
   const upcoming = rows
-    .filter(r => r.class_schedule && r.class_schedule.date >= from)
-    .map<UpcomingClassBooking>((r) => ({
+    .filter(r => r.class_schedule)
+    .map((r) => {
+      const cs = r.class_schedule!;
+      const [y, mo, d] = cs.date.split('-').map((x) => Number(x));
+      const endMins = toMin(cs.end_time);
+      const endDate = new Date(y, mo - 1, d, Math.floor(endMins / 60), endMins % 60, 0, 0);
+      return { r, endDate } as const;
+    })
+    .filter(({ endDate }) => endDate > now)
+    .map<UpcomingClassBooking>(({ r }) => ({
       booking_id: r.id,
       class_id: r.class_schedule!.id,
       title: r.class_schedule!.title ?? 'Class',
@@ -510,7 +535,7 @@ export const getUpcomingBookedClasses = async (userId: string): Promise<Upcoming
       start_time: r.class_schedule!.start_time,
       end_time: r.class_schedule!.end_time,
     }))
-    .sort((a, b) => a.date.localeCompare(b.date) || a.start_time.localeCompare(b.start_time));
+    .sort((a, b) => (a.date + a.start_time).localeCompare(b.date + b.start_time));
 
   return upcoming;
 };

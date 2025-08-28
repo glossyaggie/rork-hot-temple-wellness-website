@@ -378,7 +378,8 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
                       const res = await bookWithEligibility(uid, c.id);
                       if (res.booked) {
                         setBookingState((s) => ({ ...s, [c.id]: 'booked' }));
-                        Alert.alert('Booked in!', `${c.title} • ${c.start_time} - ${c.end_time}`);
+                        const creditMsg = res.usedCredit ? (typeof res.remainingCredits === 'number' ? `\nCredits left: ${res.remainingCredits}` : '') : '';
+                        Alert.alert('Booked in!', `${c.title} • ${c.start_time} - ${c.end_time}${creditMsg}`);
                       } else if (res.reason === 'no_pass') {
                         setBookingState((s) => ({ ...s, [c.id]: 'idle' }));
                         setPurchaseOpen(true);

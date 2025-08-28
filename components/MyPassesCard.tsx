@@ -65,32 +65,38 @@ export default function MyPassesCard({ onRefetchDone }: Props) {
           {summary.hasUnlimited ? (
             <View style={styles.row}>
               <Text style={styles.label}>Unlimited</Text>
-              <Text style={styles.value}>{summary.unlimitedValidUntil ? `Active until ${new Date(summary.unlimitedValidUntil).toLocaleDateString()}` : 'Active'}</Text>
+              <Text style={styles.value}>{summary.unlimitedValidUntil ? `Expires ${new Date(summary.unlimitedValidUntil).toLocaleDateString()}` : 'Active'}</Text>
             </View>
-          ) : (
+          ) : null}
+
+          {!summary.hasUnlimited ? (
             <View style={styles.row}>
-              <Text style={styles.label}>Unlimited</Text>
-              <Text style={styles.valueMuted}>None</Text>
+              <Text style={styles.label}>Class credits</Text>
+              <Text style={styles.value}>{summary.totalCredits}</Text>
             </View>
-          )}
-          <View style={styles.row}>
-            <Text style={styles.label}>Class credits</Text>
-            <Text style={styles.value}>{summary.totalCredits}</Text>
-          </View>
+          ) : null}
+
           {Array.isArray(passes) && passes.length > 0 ? (
             <View style={{ marginTop: 8 }}>
               {passes.map((p) => {
                 const active = p.is_active ?? false;
                 const exp = p.expires_at ? new Date(p.expires_at) : null;
                 const expired = exp ? exp < new Date() : false;
+                const isUnlimitedPass = p.remaining_credits == null;
+                const metaParts: string[] = [];
+                if (isUnlimitedPass) {
+                  if (exp) metaParts.push(`${expired ? 'expired' : 'expires'} ${exp.toLocaleDateString()}`);
+                  if (active === false) metaParts.push('inactive');
+                } else {
+                  if (exp) metaParts.push(`${expired ? 'expired' : 'expires'} ${exp.toLocaleDateString()}`);
+                  if (active === false) metaParts.push('inactive');
+                }
                 return (
                   <View key={p.id} style={styles.passRow}>
                     <Text style={styles.passType}>{p.pass_type ?? 'Pass'}</Text>
-                    <Text style={styles.passMeta}>
-                      {p.remaining_credits != null ? `${p.remaining_credits} credits` : 'Unlimited'}
-                      {exp && ` · ${expired ? 'expired' : 'expires'} ${exp.toLocaleDateString()}`}
-                      {active === false && ' · inactive'}
-                    </Text>
+                    {metaParts.length > 0 ? (
+                      <Text style={styles.passMeta}>{metaParts.join(' · ')}</Text>
+                    ) : null}
                   </View>
                 );
               })}

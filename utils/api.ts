@@ -356,7 +356,7 @@ export const summarizeActivePasses = (
 export const bookWithEligibility = async (
   userId: string,
   classId: number
-): Promise<{ booked: boolean; reason?: string }> => {
+): Promise<{ booked: boolean; reason?: string; usedCredit?: boolean; remainingCredits?: number }> => {
   try {
     const { data: passes, error } = await supabase
       .from('user_passes')
@@ -365,25 +365,31 @@ export const bookWithEligibility = async (
     if (error) throw error;
     const summary = summarizeActivePasses(passes ?? []);
 
-    if (summary.hasUnlimited) {
-      const { error: bookErr } = await supabase
-        .from('class_bookings')
-        .insert({ user_id: userId, class_id: classId });
-      if (bookErr) throw bookErr;
-      return { booked: true };
-    }
-
-    if (summary.totalCredits > 0 && summary.creditPassId) {
-      const { error: bookErr } = await supabase
-        .from('class_bookings')
-        .insert({ user_id: userId, class_id: classId });
-      if (bookErr) throw bookErr;
-      const { error: decErr } = await supabase
-        .from('user_passes')
-        .update({ remaining_credits: (passes?.find(p => p.id === summary.creditPassId)?.remaining_credits ?? 1) - 1 })
-        .eq('id', summary.creditPassId);
-      if (decErr) throw decErr;
-      return { booked: true };
+    const payload = { userId, classId, useCreditPassId: summary.hasUnlimited ? null : summary.creditPassId };
+    try {
+      const { data: result, error: fnErr } = await supabase.functions.invoke('book-class', { body: payload });
+      if (fnErr) throw fnErr as any;
+      if ((result as any)?.ok) {
+        const usedCredit = Boolean((result as any)?.usedCredit ?? false);
+        const remainingCredits = (result as any)?.remainingCredits as number | undefined;
+        return { booked: true, usedCredit, remainingCredits };
+      }
+    } catch (edgeErr) {
+      console.warn('bookWithEligibility: edge function fallback', (edgeErr as any)?.message ?? String(edgeErr));
+      if (summary.hasUnlimited) {
+        const { error: bookErr } = await supabase
+          .from('class_bookings')
+          .insert({ user_id: userId, class_id: classId });
+        if (bookErr) throw bookErr;
+        return { booked: true };
+      }
+      if (summary.totalCredits > 0) {
+        const { error: bookErr } = await supabase
+          .from('class_bookings')
+          .insert({ user_id: userId, class_id: classId });
+        if (bookErr) throw bookErr;
+        return { booked: true };
+      }
     }
 
     return { booked: false, reason: 'no_pass' };
@@ -474,7 +480,6 @@ export type UpcomingClassBooking = {
   date: string; // YYYY-MM-DD
   start_time: string; // e.g., '6:00 PM'
   end_time: string;   // e.g., '7:00 PM'
-  created_at: string;
 };
 
 export const getUpcomingBookedClasses = async (userId: string): Promise<UpcomingClassBooking[]> => {
@@ -488,14 +493,12 @@ export const getUpcomingBookedClasses = async (userId: string): Promise<Upcoming
     .from('class_bookings')
     .select(`
       id,
-      created_at,
       class_schedule:class_id (id, title, instructor, date, start_time, end_time)
     `)
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
+    .eq('user_id', userId);
   if (error) throw error;
 
-  const rows = ((data ?? []) as unknown) as { id: number; created_at: string; class_schedule: { id: number; title: string | null; instructor: string | null; date: string; start_time: string; end_time: string } | null }[];
+  const rows = ((data ?? []) as unknown) as { id: number; class_schedule: { id: number; title: string | null; instructor: string | null; date: string; start_time: string; end_time: string } | null }[];
   const upcoming = rows
     .filter(r => r.class_schedule && r.class_schedule.date >= from)
     .map<UpcomingClassBooking>((r) => ({
@@ -506,9 +509,8 @@ export const getUpcomingBookedClasses = async (userId: string): Promise<Upcoming
       date: r.class_schedule!.date,
       start_time: r.class_schedule!.start_time,
       end_time: r.class_schedule!.end_time,
-      created_at: r.created_at,
     }))
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort((a, b) => a.date.localeCompare(b.date) || a.start_time.localeCompare(b.start_time));
 
   return upcoming;
 };

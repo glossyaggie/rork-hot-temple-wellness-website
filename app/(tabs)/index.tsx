@@ -16,6 +16,7 @@ import { useHabitTracker } from '@/hooks/useHabitTracker';
 
 import PassPurchaseModal from '@/components/PassPurchaseModal';
 import HabitCalendar from '@/components/HabitCalendar';
+import MyPassesCard from '@/components/MyPassesCard';
 import NotificationBanner from '@/components/NotificationBanner';
 import QRCodeScanner from '@/components/QRCodeScanner';
 import { router } from 'expo-router';
@@ -257,6 +258,8 @@ export default function AccountScreen() {
             </TouchableOpacity>
           </View>
         </View>
+
+        <MyPassesCard />
 
         {/* Upcoming Bookings */}
         <View style={styles.bookingsSection}>

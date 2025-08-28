@@ -3,6 +3,7 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIn
 import { X } from 'lucide-react-native';
 import { theme } from '@/constants/theme';
 import { Pass } from '@/types';
+import { priceMap as globalPriceMap, PriceMap } from '@/lib/prices';
 import { createCheckout, openCheckout, confirmPayment } from '@/utils/api';
 
 const PASSES: ReadonlyArray<Pass> = [
@@ -16,16 +17,7 @@ const PASSES: ReadonlyArray<Pass> = [
   { id: 'vip-yearly', name: 'VIP Yearly', price: 0, credits: 0, description: 'Best value VIP for 12 months', isUnlimited: true, duration: 365 },
 ];
 
-export type PriceMap = {
-  'single'?: string;
-  '5-class'?: string;
-  '10-class'?: string;
-  '25-class'?: string;
-  'weekly-unlimited'?: string;
-  'monthly-unlimited'?: string;
-  'vip-monthly'?: string;
-  'vip-yearly'?: string;
-};
+
 
 interface PassPurchaseModalProps {
   visible: boolean;
@@ -39,8 +31,8 @@ export default function PassPurchaseModal({ visible, onClose, onSuccess, priceMa
   const [loading, setLoading] = useState<boolean>(false);
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
 
-  const safePriceMap: PriceMap = priceMap ?? {};
-  const available = useMemo(() => PASSES, [safePriceMap]);
+  const safePriceMap: PriceMap = priceMap ?? globalPriceMap;
+  const available = useMemo(() => PASSES, []);
 
   const handlePurchase = async (pass: Pass) => {
     try {
@@ -106,6 +98,7 @@ export default function PassPurchaseModal({ visible, onClose, onSuccess, priceMa
           <Text style={styles.subtitle}>Select a pass. Prices load from Stripe by Price ID.</Text>
 
           {available.map((pass) => {
+            console.log('PassPurchaseModal lookup', pass.id, safePriceMap[pass.id as keyof PriceMap]);
             const isVIP = pass.id.includes('vip');
             const isPopular = pass.id === 'monthly-unlimited';
             const busy = loading && selectedId === pass.id;

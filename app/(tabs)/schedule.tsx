@@ -6,7 +6,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useSchedule, ScheduleRow } from '@/hooks/useSchedule';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import PassPurchaseModal, { PriceMap } from '@/components/PassPurchaseModal';
+import PassPurchaseModal from '@/components/PassPurchaseModal';
+import { priceMap } from '@/lib/prices';
 import { bookWithEligibility } from '@/utils/api';
 
 function fmtTimeLabel(raw: string): string {
@@ -100,16 +101,6 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
   const [draft, setDraft] = useState<{ title: string; instructor: string; start_time: string; end_time: string; capacity: string }>({ title: '', instructor: '', start_time: '', end_time: '', capacity: '' });
 
   const [purchaseOpen, setPurchaseOpen] = useState<boolean>(false);
-  const priceMap: PriceMap = useMemo(() => ({
-    'single': 'price_1S0r9bARpqh0Ut1y4lHGGuAT',
-    '5-class': 'price_1S0rGpARpqh0Ut1yYrnt5R6V',
-    '10-class': 'price_1S0rHLARpqh0Ut1ybWGa3ocf',
-    '25-class': 'price_1S0rHqARpqh0Ut1ygGGaoqac',
-    'weekly-unlimited': 'price_1S0rIRARpqh0Ut1yQkmz18xc',
-    'monthly-unlimited': 'price_1S0rJlARpqh0Ut1yaeBEQVRf',
-    'vip-monthly': 'price_1S0rKbARpqh0Ut1ydYwnH2Zy',
-    'vip-yearly': 'price_1S0rLOARpqh0Ut1y2lbJ17g7'
-  }), []);
 
   const allDays = useMemo(() => {
     const days: Date[] = [];

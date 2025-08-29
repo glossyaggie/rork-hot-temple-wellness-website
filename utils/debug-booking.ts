@@ -114,16 +114,38 @@ export const debugBooking = {
     }
   },
 
+  // Test if RPC function exists
+  async testRPCExists() {
+    console.log('🔧 Testing if book_class RPC exists...');
+    
+    try {
+      // Try calling with invalid class ID to test if function exists
+      const { error } = await supabase.rpc('book_class', { p_class_id: 999999 });
+      
+      if (error?.message?.includes('function public.book_class(integer) does not exist')) {
+        console.log('❌ RPC function does not exist in database');
+        return { exists: false, error: 'RPC function not found' };
+      }
+      
+      console.log('✅ RPC function exists (got expected error for invalid class):', error?.message);
+      return { exists: true, testError: error?.message };
+    } catch (e: any) {
+      console.error('🚨 RPC test failed:', e);
+      return { exists: false, error: e?.message };
+    }
+  },
+
   // Run all checks
   async runAllChecks() {
     console.log('🔍 Running all booking system checks...');
     
     const auth = await this.checkAuth();
     const passes = await this.checkPasses();
+    const rpcExists = await this.testRPCExists();
     const upcoming = await this.checkUpcoming();
     const tables = await this.checkTables();
     
-    return { auth, passes, upcoming, tables };
+    return { auth, passes, rpcExists, upcoming, tables };
   }
 };
 

@@ -227,4 +227,19 @@ ON user_passes
 FOR UPDATE
 USING (auth.uid() = user_id);
 
+-- 9) Test the function works
+SELECT 'Testing book_class function...' as status;
+
+-- This should return an error about class_not_found, which means the function exists
+-- If you get "function does not exist" error, the function wasn't created properly
+DO $
+BEGIN
+  BEGIN
+    PERFORM book_class(999999);
+  EXCEPTION
+    WHEN OTHERS THEN
+      RAISE NOTICE 'Function test result: %', SQLERRM;
+  END;
+END$;
+
 SELECT 'Atomic booking system installed successfully!' as result;

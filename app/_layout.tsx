@@ -10,6 +10,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import * as Linking from 'expo-linking';
 import React, { useEffect, useState } from 'react';
 import { confirmPayment } from '@/utils/api';
+import '@/utils/debug-booking'; // Import debug utilities for testing
 
 const queryClient = new QueryClient();
 

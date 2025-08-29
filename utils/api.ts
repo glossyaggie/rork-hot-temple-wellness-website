@@ -366,31 +366,7 @@ export const bookClass = async (classId: number): Promise<{ bookingId: string; n
   console.log('🔄 Attempting to book class:', classId);
   
   try {
-    // First check if user is authenticated
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-    if (authError || !user) {
-      throw new Error('Please sign in to book classes.');
-    }
-    console.log('👤 User authenticated:', user.id);
-    
-    // Check if user has any active passes
-    const passes = await fetchMyPasses();
-    console.log('🎫 User passes:', passes);
-    
-    const activePasses = passes.filter(p => {
-      const isActive = p.is_active !== false;
-      const hasCredits = (p.remaining_credits ?? 0) > 0 || (p.pass_type && p.pass_type.toLowerCase().includes('unlimited'));
-      const notExpired = !p.expires_at || new Date(p.expires_at) > new Date();
-      return isActive && hasCredits && notExpired;
-    });
-    
-    if (activePasses.length === 0) {
-      throw new Error('You need an active pass with credits.');
-    }
-    
-    console.log('✅ Active passes found:', activePasses.length);
-    
-    // Call the RPC function
+    // Call the RPC function directly - it handles all validation
     const { data, error } = await supabase.rpc('book_class', { p_class_id: classId });
     console.log('📊 RPC response:', { data, error });
     

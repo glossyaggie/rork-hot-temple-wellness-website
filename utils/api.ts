@@ -2,6 +2,8 @@ import { supabase } from '@/lib/supabase';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 import * as Linking from 'expo-linking';
+import { emitBookingsChanged, emitPassesChanged } from '@/utils/events';
+
 
 console.log('🔧 API utils loaded with Supabase client');
 
@@ -177,7 +179,7 @@ export const getUserBookings = async (userId: string): Promise<Booking[]> => {
   return data || [];
 };
 
-export const bookClass = async (userId: string, classId: string | number): Promise<Booking> => {
+export const bookClassLegacy = async (userId: string, classId: string | number): Promise<Booking> => {
   const { data, error } = await supabase
     .from('bookings')
     .insert({
@@ -192,12 +194,13 @@ export const bookClass = async (userId: string, classId: string | number): Promi
 };
 
 export const cancelBooking = async (bookingId: string): Promise<void> => {
-  const { error } = await supabase
-    .from('bookings')
-    .update({ status: 'cancelled' })
-    .eq('id', bookingId);
-    
-  if (error) throw error;
+  const { error } = await supabase.rpc('cancel_booking', { p_booking_id: bookingId });
+  if (error) {
+    const msg = error.message || '';
+    if (msg.includes('booking_not_found')) throw new Error('Booking not found.');
+    if (msg.includes('too_late_to_cancel')) throw new Error('Too late to cancel (less than 2 hours before class).');
+    throw error;
+  }
 };
 
 // Admin functions (with role checks)
@@ -357,67 +360,47 @@ export const summarizeActivePasses = (
   return { hasUnlimited, unlimitedValidUntil, totalCredits, creditPassId };
 };
 
-import { emitBookingsChanged, emitPassesChanged } from '@/utils/events';
+
+
+export const bookClass = async (classId: number): Promise<{ bookingId: string; newBalance: number }> => {
+  const { data, error } = await supabase.rpc('book_class', { p_class_id: classId });
+  if (error) {
+    const msg = error.message || '';
+    if (msg.includes('no_credits')) throw new Error('You need an active pass with credits.');
+    if (msg.includes('class_full')) throw new Error('That class is full.');
+    if (msg.includes('already_booked')) throw new Error('You\'re already booked in this class.');
+    if (msg.includes('class_not_found')) throw new Error('Class not found.');
+    throw error;
+  }
+  return { bookingId: data?.[0]?.booking_id, newBalance: data?.[0]?.new_balance };
+};
 
 export const bookWithEligibility = async (
   userId: string,
   classId: number
 ): Promise<{ booked: boolean; reason?: string; usedCredit?: boolean; remainingCredits?: number }> => {
   try {
-    const { data: passes, error } = await supabase
-      .from('user_passes')
-      .select('id, pass_type, remaining_credits, expires_at, is_active')
-      .eq('user_id', userId);
-    if (error) throw error;
-    const summary = summarizeActivePasses(passes ?? []);
-
-    const payload = { userId, classId, useCreditPassId: summary.hasUnlimited ? null : summary.creditPassId };
-
-    const { data: result, error: fnErr } = await supabase.functions.invoke('book-class', { body: payload });
-    if (!fnErr && (result as any)?.ok) {
-      const usedCredit = Boolean((result as any)?.usedCredit ?? false);
-      const remainingCredits = (result as any)?.remainingCredits as number | undefined;
-      try { emitBookingsChanged(); } catch {}
-      try { emitPassesChanged(); } catch {}
-      return { booked: true, usedCredit, remainingCredits };
-    }
-
-    console.warn('bookWithEligibility: edge failed or responded not ok, falling back', (fnErr as any)?.message ?? (result as any)?.error ?? 'unknown');
-
-    if (summary.hasUnlimited) {
-      const { error: bookErr } = await supabase
-        .from('class_bookings')
-        .insert({ user_id: userId, class_id: classId });
-      if (bookErr) throw bookErr;
-      try { emitBookingsChanged(); } catch {}
-      try { emitPassesChanged(); } catch {}
-      return { booked: true, usedCredit: false };
-    }
-
-    if (summary.totalCredits > 0) {
-      const passId = summary.creditPassId;
-      const { error: bookErr } = await supabase
-        .from('class_bookings')
-        .insert({ user_id: userId, class_id: classId });
-      if (bookErr) throw bookErr;
-      if (passId) {
-        const target = (passes ?? []).find((p: any) => p.id === passId);
-        const newRemaining = Math.max(0, ((target?.remaining_credits ?? summary.totalCredits) - 1));
-        const { error: decErr } = await supabase
-          .from('user_passes')
-          .update({ remaining_credits: newRemaining, is_active: newRemaining > 0 })
-          .eq('id', passId);
-        if (decErr) console.warn('fallback dec credits error', decErr.message);
-      }
-      try { emitPassesChanged(); } catch {}
-      try { emitBookingsChanged(); } catch {}
-      return { booked: true, usedCredit: true };
-    }
-
-    return { booked: false, reason: 'no_pass' };
+    const result = await bookClass(classId);
+    try { emitBookingsChanged(); } catch { /* ignore */ }
+    try { emitPassesChanged(); } catch { /* ignore */ }
+    return { 
+      booked: true, 
+      usedCredit: true, 
+      remainingCredits: result.newBalance 
+    };
   } catch (e: any) {
     console.error('bookWithEligibility error', e);
-    return { booked: false, reason: e?.message ?? 'error' };
+    const msg = e?.message ?? '';
+    if (msg.includes('need an active pass')) {
+      return { booked: false, reason: 'no_pass' };
+    }
+    if (msg.includes('class is full')) {
+      return { booked: false, reason: 'class_full' };
+    }
+    if (msg.includes('already booked')) {
+      return { booked: false, reason: 'already_booked' };
+    }
+    return { booked: false, reason: msg || 'error' };
   }
 };
 
@@ -506,10 +489,6 @@ export type UpcomingClassBooking = {
 
 export const getUpcomingBookedClasses = async (userId: string): Promise<UpcomingClassBooking[]> => {
   const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const dd = String(now.getDate()).padStart(2, '0');
-  const from = `${yyyy}-${mm}-${dd}`;
 
   const { data, error } = await supabase
     .from('class_bookings')

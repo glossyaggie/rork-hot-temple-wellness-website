@@ -383,14 +383,22 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
                       
                       if (res.booked) {
                         setBookingState((s) => ({ ...s, [c.id]: 'booked' }));
-                        const creditMsg = res.usedCredit ? (typeof res.remainingCredits === 'number' ? `\nCredits left: ${res.remainingCredits}` : '') : '';
-                        Alert.alert('Booked in!', `${c.title} • ${c.start_time} - ${c.end_time}${creditMsg}`);
+                        const creditMsg = res.usedCredit ? (typeof res.remainingCredits === 'number' ? `\nCredits remaining: ${res.remainingCredits}` : '') : '';
+                        Alert.alert('✅ Booked Successfully!', `You're booked into ${c.title}\n${c.start_time} - ${c.end_time}${creditMsg}`);
+                        
+                        // Auto-reset booking state after 3 seconds
+                        setTimeout(() => {
+                          setBookingState((s) => ({ ...s, [c.id]: 'idle' }));
+                        }, 3000);
                       } else if (res.reason === 'no_pass') {
                         setBookingState((s) => ({ ...s, [c.id]: 'idle' }));
-                        setPurchaseOpen(true);
+                        Alert.alert('No Active Pass', 'You need an active pass to book classes. Would you like to purchase one?', [
+                          { text: 'Cancel', style: 'cancel' },
+                          { text: 'Purchase Pass', onPress: () => setPurchaseOpen(true) }
+                        ]);
                       } else {
                         setBookingState((s) => ({ ...s, [c.id]: 'idle' }));
-                        Alert.alert('Not booked', res.reason ?? 'Try again');
+                        Alert.alert('Booking Failed', res.reason ?? 'Please try again.');
                       }
                     } catch (e: any) {
                       console.error('🚨 Booking error in UI:', e);

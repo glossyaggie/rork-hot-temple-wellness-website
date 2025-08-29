@@ -90,6 +90,13 @@ export default function MyPassesCard({ onRefetchDone }: Props) {
               <Text style={styles.value}>{summary.totalCredits}</Text>
             </View>
           ) : null}
+          
+          {summary.hasUnlimited && summary.totalCredits > 0 ? (
+            <View style={styles.row}>
+              <Text style={styles.label}>Additional credits</Text>
+              <Text style={styles.value}>{summary.totalCredits}</Text>
+            </View>
+          ) : null}
 
           {Array.isArray(passes) && passes.length > 0 ? (
             <View style={{ marginTop: 8 }}>

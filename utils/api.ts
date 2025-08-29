@@ -366,6 +366,31 @@ export const bookClass = async (classId: number): Promise<{ bookingId: string; n
   console.log('🔄 Attempting to book class:', classId);
   
   try {
+    // First check if user is authenticated
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+      throw new Error('Please sign in to book classes.');
+    }
+    console.log('👤 User authenticated:', user.id);
+    
+    // Check if user has any active passes
+    const passes = await fetchMyPasses();
+    console.log('🎫 User passes:', passes);
+    
+    const activePasses = passes.filter(p => {
+      const isActive = p.is_active !== false;
+      const hasCredits = (p.remaining_credits ?? 0) > 0 || (p.pass_type && p.pass_type.toLowerCase().includes('unlimited'));
+      const notExpired = !p.expires_at || new Date(p.expires_at) > new Date();
+      return isActive && hasCredits && notExpired;
+    });
+    
+    if (activePasses.length === 0) {
+      throw new Error('You need an active pass with credits.');
+    }
+    
+    console.log('✅ Active passes found:', activePasses.length);
+    
+    // Call the RPC function
     const { data, error } = await supabase.rpc('book_class', { p_class_id: classId });
     console.log('📊 RPC response:', { data, error });
     
@@ -377,11 +402,23 @@ export const bookClass = async (classId: number): Promise<{ bookingId: string; n
       if (msg.includes('already_booked')) throw new Error('You\'re already booked in this class.');
       if (msg.includes('class_not_found')) throw new Error('Class not found.');
       if (msg.includes('not_authenticated')) throw new Error('Please sign in to book classes.');
-      throw error;
+      throw new Error(msg || 'Booking failed. Please try again.');
     }
     
-    const result = { bookingId: data?.[0]?.booking_id, newBalance: data?.[0]?.new_balance };
+    if (!data || data.length === 0) {
+      throw new Error('Booking failed - no response from server.');
+    }
+    
+    const result = { 
+      bookingId: data[0]?.booking_id, 
+      newBalance: data[0]?.new_balance ?? 0 
+    };
     console.log('✅ Booking successful:', result);
+    
+    // Emit events to refresh UI
+    try { emitBookingsChanged(); } catch { /* ignore */ }
+    try { emitPassesChanged(); } catch { /* ignore */ }
+    
     return result;
   } catch (e) {
     console.error('💥 bookClass error:', e);
@@ -393,28 +430,32 @@ export const bookWithEligibility = async (
   userId: string,
   classId: number
 ): Promise<{ booked: boolean; reason?: string; usedCredit?: boolean; remainingCredits?: number }> => {
+  console.log('🎯 bookWithEligibility called for user:', userId, 'class:', classId);
+  
   try {
     const result = await bookClass(classId);
-    try { emitBookingsChanged(); } catch { /* ignore */ }
-    try { emitPassesChanged(); } catch { /* ignore */ }
+    console.log('✅ Booking successful, result:', result);
+    
     return { 
       booked: true, 
       usedCredit: true, 
       remainingCredits: result.newBalance 
     };
   } catch (e: any) {
-    console.error('bookWithEligibility error', e);
+    console.error('❌ bookWithEligibility error:', e);
     const msg = e?.message ?? '';
-    if (msg.includes('need an active pass')) {
+    
+    if (msg.includes('need an active pass') || msg.includes('no_credits')) {
       return { booked: false, reason: 'no_pass' };
     }
-    if (msg.includes('class is full')) {
+    if (msg.includes('class is full') || msg.includes('class_full')) {
       return { booked: false, reason: 'class_full' };
     }
-    if (msg.includes('already booked')) {
+    if (msg.includes('already booked') || msg.includes('already_booked')) {
       return { booked: false, reason: 'already_booked' };
     }
-    return { booked: false, reason: msg || 'error' };
+    
+    return { booked: false, reason: msg || 'Booking failed. Please try again.' };
   }
 };
 
@@ -502,53 +543,97 @@ export type UpcomingClassBooking = {
 };
 
 export const getUpcomingBookedClasses = async (userId: string): Promise<UpcomingClassBooking[]> => {
-  const now = new Date();
+  console.log('📅 Loading upcoming classes for user:', userId);
+  
+  try {
+    const { data, error } = await supabase
+      .from('class_bookings')
+      .select(`
+        id,
+        status,
+        class_schedule:class_id (
+          id, 
+          title, 
+          instructor, 
+          date, 
+          start_time, 
+          end_time
+        )
+      `)
+      .eq('user_id', userId)
+      .eq('status', 'booked')
+      .order('created_at', { ascending: false });
+      
+    if (error) {
+      console.error('❌ Error loading bookings:', error);
+      throw error;
+    }
+    
+    console.log('📊 Raw booking data:', data);
+    
+    if (!data || data.length === 0) {
+      console.log('📭 No bookings found');
+      return [];
+    }
 
-  const { data, error } = await supabase
-    .from('class_bookings')
-    .select(`
-      id,
-      class_schedule:class_id (id, title, instructor, date, start_time, end_time)
-    `)
-    .eq('user_id', userId);
-  if (error) throw error;
+    const rows = (data as unknown) as { 
+      id: string; 
+      status: string;
+      class_schedule: { 
+        id: number; 
+        title: string | null; 
+        instructor: string | null; 
+        date: string; 
+        start_time: string; 
+        end_time: string 
+      } | null 
+    }[];
 
-  const rows = ((data ?? []) as unknown) as { id: number; class_schedule: { id: number; title: string | null; instructor: string | null; date: string; start_time: string; end_time: string } | null }[];
+    const toMin = (s: string) => {
+      const parts = s.trim().split(' ');
+      const t = parts[0] ?? '';
+      const ampm = (parts[1] ?? '').toUpperCase();
+      const hm = t.split(':');
+      let h = Number(hm[0] ?? 0);
+      const m = Number(hm[1] ?? 0);
+      if (ampm === 'PM' && h !== 12) h += 12;
+      if (ampm === 'AM' && h === 12) h = 0;
+      return h * 60 + m;
+    };
 
-  const toMin = (s: string) => {
-    const parts = s.trim().split(' ');
-    const t = parts[0] ?? '';
-    const ampm = (parts[1] ?? '').toUpperCase();
-    const hm = t.split(':');
-    let h = Number(hm[0] ?? 0);
-    const m = Number(hm[1] ?? 0);
-    if (ampm === 'PM' && h !== 12) h += 12;
-    if (ampm === 'AM' && h === 12) h = 0;
-    return h * 60 + m;
-  };
+    const now = new Date();
+    const upcoming = rows
+      .filter(r => r.class_schedule && r.status === 'booked')
+      .map((r) => {
+        const cs = r.class_schedule!;
+        const [y, mo, d] = cs.date.split('-').map((x) => Number(x));
+        const endMins = toMin(cs.end_time);
+        const endDate = new Date(y, mo - 1, d, Math.floor(endMins / 60), endMins % 60, 0, 0);
+        return { r, endDate, cs } as const;
+      })
+      .filter(({ endDate }) => {
+        const isUpcoming = endDate > now;
+        console.log(`🕐 Class ${endDate.toISOString()} vs now ${now.toISOString()}: ${isUpcoming ? 'upcoming' : 'past'}`);
+        return isUpcoming;
+      })
+      .map<UpcomingClassBooking>(({ r, cs }) => ({
+        booking_id: parseInt(r.id),
+        class_id: cs.id,
+        title: cs.title ?? 'Class',
+        instructor: cs.instructor ?? null,
+        date: cs.date,
+        start_time: cs.start_time,
+        end_time: cs.end_time,
+      }))
+      .sort((a, b) => (a.date + a.start_time).localeCompare(b.date + b.start_time))
+      .slice(0, 10); // Limit to 10 upcoming classes
 
-  const upcoming = rows
-    .filter(r => r.class_schedule)
-    .map((r) => {
-      const cs = r.class_schedule!;
-      const [y, mo, d] = cs.date.split('-').map((x) => Number(x));
-      const endMins = toMin(cs.end_time);
-      const endDate = new Date(y, mo - 1, d, Math.floor(endMins / 60), endMins % 60, 0, 0);
-      return { r, endDate } as const;
-    })
-    .filter(({ endDate }) => endDate > now)
-    .map<UpcomingClassBooking>(({ r }) => ({
-      booking_id: r.id,
-      class_id: r.class_schedule!.id,
-      title: r.class_schedule!.title ?? 'Class',
-      instructor: r.class_schedule!.instructor ?? null,
-      date: r.class_schedule!.date,
-      start_time: r.class_schedule!.start_time,
-      end_time: r.class_schedule!.end_time,
-    }))
-    .sort((a, b) => (a.date + a.start_time).localeCompare(b.date + b.start_time));
-
-  return upcoming;
+    console.log('✅ Upcoming classes processed:', upcoming.length);
+    return upcoming;
+  } catch (e) {
+    console.error('💥 getUpcomingBookedClasses error:', e);
+    throw e;
+  }
 };
 
 // Development helpers
@@ -586,4 +671,6 @@ export const testBookingRPC = async (classId: number) => {
 // Add this to window for easy testing
 if (typeof window !== 'undefined') {
   (window as any).testBookingRPC = testBookingRPC;
+  (window as any).bookClass = bookClass;
+  (window as any).getUpcomingBookedClasses = getUpcomingBookedClasses;
 }

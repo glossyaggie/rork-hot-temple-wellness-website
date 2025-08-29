@@ -1,8 +1,8 @@
 import createContextHook from '@nkzw/create-context-hook';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { Booking, ClassSlot } from '@/types';
 import { useAuth } from './useAuth';
+import { bookClass as apiBookClass, getUpcomingBookedClasses, cancelBooking as apiCancelBooking } from '@/utils/api';
 
 const MOCK_CLASSES: ClassSlot[] = [
   // Monday
@@ -71,115 +71,104 @@ const [BookingsProvider, useBookingsContext] = createContextHook(() => {
   const { session } = useAuth();
   const user = session?.user;
 
+  const loadBookings = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      console.log('📅 Loading bookings for user:', user.id);
+      
+      // Load upcoming bookings from the database
+      const upcomingClasses = await getUpcomingBookedClasses(user.id);
+      console.log('📊 Loaded upcoming classes:', upcomingClasses.length);
+      
+      // Convert to the format expected by the UI
+      const convertedBookings: Booking[] = upcomingClasses.map(uc => ({
+        id: uc.booking_id.toString(),
+        userId: user.id,
+        classId: uc.class_id.toString(),
+        date: uc.date,
+        time: uc.start_time,
+        classType: uc.title,
+        instructor: uc.instructor || 'TBD',
+        status: 'booked' as const,
+      }));
+      
+      setBookings(convertedBookings);
+    } catch (error) {
+      console.error('❌ Error loading bookings:', error);
+    }
+  }, [user]);
+
   useEffect(() => {
-    loadBookings();
-  }, []);
-
-  const loadBookings = async () => {
-    try {
-      const bookingsData = await AsyncStorage.getItem('bookings');
-      if (bookingsData) {
-        setBookings(JSON.parse(bookingsData));
-      }
-    } catch (error) {
-      console.error('Error loading bookings:', error);
+    if (user) {
+      loadBookings();
     }
-  };
+  }, [user, loadBookings]);
 
-  const saveBookings = async (newBookings: Booking[]) => {
-    try {
-      await AsyncStorage.setItem('bookings', JSON.stringify(newBookings));
-      setBookings(newBookings);
-    } catch (error) {
-      console.error('Error saving bookings:', error);
-    }
-  };
-
-  const bookClass = async (classSlot: ClassSlot): Promise<{ success: boolean; message: string }> => {
+  const bookClass = useCallback(async (classSlot: ClassSlot): Promise<{ success: boolean; message: string; newBalance?: number }> => {
     if (!user) {
       return { success: false, message: 'Please log in to book classes' };
     }
 
-    // Check if class is full
-    if (classSlot.bookings >= classSlot.maxCapacity) {
-      return { success: false, message: 'This class is full' };
-    }
-
-    // Check if user already booked this class today
-    const today = new Date().toDateString();
-    const existingBooking = bookings.find(
-      b => b.userId === user.id && 
-           b.classId === classSlot.id && 
-           new Date(b.date).toDateString() === today
-    );
-
-    if (existingBooking) {
-      return { success: false, message: 'You have already booked this class today' };
-    }
-
-    // For now, allow booking without credit check
-    // TODO: Implement proper credit system with Supabase
-
-    // Create booking
-    const newBooking: Booking = {
-      id: Date.now().toString(),
-      userId: user.id,
-      classId: classSlot.id,
-      date: new Date().toISOString(),
-      time: classSlot.time,
-      classType: classSlot.type,
-      instructor: classSlot.instructor,
-      status: 'booked',
-    };
-
-    const updatedBookings = [...bookings, newBooking];
-    await saveBookings(updatedBookings);
-
-    // Update class booking count and add user to bookedBy list
-    const updatedClasses = classes.map(c => 
-      c.id === classSlot.id ? { 
-        ...c, 
-        bookings: c.bookings + 1,
-        bookedBy: [...(c.bookedBy || []), user.id]
-      } : c
-    );
-    setClasses(updatedClasses);
-
-    return { success: true, message: 'Class booked successfully!' };
-  };
-
-  const cancelBooking = async (bookingId: string): Promise<boolean> => {
     try {
-      const booking = bookings.find(b => b.id === bookingId);
-      if (!booking) return false;
-
-      // Remove booking
-      const updatedBookings = bookings.filter(b => b.id !== bookingId);
-      await saveBookings(updatedBookings);
-
-      // Update class booking count and remove user from bookedBy list
+      console.log('🎯 Booking class:', classSlot.id, 'for user:', user.id);
+      
+      // Convert string ID to number for the database
+      const classIdNum = parseInt(classSlot.id.replace(/[^0-9]/g, '')) || 1;
+      
+      // Use the new RPC function that handles everything atomically
+      const result = await apiBookClass(classIdNum);
+      console.log('✅ Booking result:', result);
+      
+      // Update local state to reflect the booking
       const updatedClasses = classes.map(c => 
-        c.id === booking.classId ? { 
+        c.id === classSlot.id ? { 
           ...c, 
-          bookings: Math.max(0, c.bookings - 1),
-          bookedBy: (c.bookedBy || []).filter(id => id !== booking.userId)
+          bookings: c.bookings + 1,
+          bookedBy: [...(c.bookedBy || []), user.id]
         } : c
       );
       setClasses(updatedClasses);
+      
+      // Refresh bookings from database
+      await loadBookings();
+      
+      return { 
+        success: true, 
+        message: `Class booked! ${result.newBalance} credits remaining.`,
+        newBalance: result.newBalance
+      };
+    } catch (error: any) {
+      console.error('❌ Booking error:', error);
+      const message = error?.message || 'Failed to book class. Please try again.';
+      return { success: false, message };
+    }
+  }, [user, classes, loadBookings]);
 
+  const cancelBooking = useCallback(async (bookingId: string): Promise<boolean> => {
+    try {
+      console.log('🚫 Cancelling booking:', bookingId);
+      
+      // Use the new RPC function that handles credit refunds
+      await apiCancelBooking(bookingId);
+      
+      // Refresh bookings from database
+      await loadBookings();
+      
+      console.log('✅ Booking cancelled successfully');
       return true;
     } catch (error) {
-      console.error('Error cancelling booking:', error);
+      console.error('❌ Error cancelling booking:', error);
       return false;
     }
-  };
+  }, [loadBookings]);
 
-  const getUserBookings = (): Booking[] => {
+  const getUserBookings = useCallback((): Booking[] => {
     if (!user) return [];
     return bookings.filter(b => b.userId === user.id && b.status === 'booked');
-  };
+  }, [user, bookings]);
 
-  const getUpcomingBookings = (): Booking[] => {
+  const getUpcomingBookings = useCallback((): Booking[] => {
     const userBookings = getUserBookings();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -189,16 +178,16 @@ const [BookingsProvider, useBookingsContext] = createContextHook(() => {
       bookingDate.setHours(0, 0, 0, 0);
       return bookingDate >= today;
     });
-  };
+  }, [getUserBookings]);
 
-  return {
+  return useMemo(() => ({
     classes,
     bookings,
     bookClass,
     cancelBooking,
     getUserBookings,
     getUpcomingBookings,
-  };
+  }), [classes, bookings, bookClass, cancelBooking, getUserBookings, getUpcomingBookings]);
 });
 
 export { BookingsProvider };

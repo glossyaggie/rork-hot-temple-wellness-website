@@ -363,16 +363,30 @@ export const summarizeActivePasses = (
 
 
 export const bookClass = async (classId: number): Promise<{ bookingId: string; newBalance: number }> => {
-  const { data, error } = await supabase.rpc('book_class', { p_class_id: classId });
-  if (error) {
-    const msg = error.message || '';
-    if (msg.includes('no_credits')) throw new Error('You need an active pass with credits.');
-    if (msg.includes('class_full')) throw new Error('That class is full.');
-    if (msg.includes('already_booked')) throw new Error('You\'re already booked in this class.');
-    if (msg.includes('class_not_found')) throw new Error('Class not found.');
-    throw error;
+  console.log('🔄 Attempting to book class:', classId);
+  
+  try {
+    const { data, error } = await supabase.rpc('book_class', { p_class_id: classId });
+    console.log('📊 RPC response:', { data, error });
+    
+    if (error) {
+      console.error('❌ RPC error:', error);
+      const msg = error.message || '';
+      if (msg.includes('no_credits')) throw new Error('You need an active pass with credits.');
+      if (msg.includes('class_full')) throw new Error('That class is full.');
+      if (msg.includes('already_booked')) throw new Error('You\'re already booked in this class.');
+      if (msg.includes('class_not_found')) throw new Error('Class not found.');
+      if (msg.includes('not_authenticated')) throw new Error('Please sign in to book classes.');
+      throw error;
+    }
+    
+    const result = { bookingId: data?.[0]?.booking_id, newBalance: data?.[0]?.new_balance };
+    console.log('✅ Booking successful:', result);
+    return result;
+  } catch (e) {
+    console.error('💥 bookClass error:', e);
+    throw e;
   }
-  return { bookingId: data?.[0]?.booking_id, newBalance: data?.[0]?.new_balance };
 };
 
 export const bookWithEligibility = async (
@@ -540,3 +554,36 @@ export const getUpcomingBookedClasses = async (userId: string): Promise<Upcoming
 // Development helpers
 export const isDevelopment = process.env.NODE_ENV === 'development';
 export const isProduction = process.env.NODE_ENV === 'production';
+
+// Debug function to test RPC
+export const testBookingRPC = async (classId: number) => {
+  console.log('🧪 Testing book_class RPC with classId:', classId);
+  
+  try {
+    // First check if user is authenticated
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    console.log('👤 Auth check:', { user: user?.id, error: authError });
+    
+    if (!user) {
+      return { success: false, error: 'Not authenticated' };
+    }
+    
+    // Check if user has any passes
+    const passes = await fetchMyPasses();
+    console.log('🎫 User passes:', passes);
+    
+    // Try the RPC call
+    const { data, error } = await supabase.rpc('book_class', { p_class_id: classId });
+    console.log('📞 RPC result:', { data, error });
+    
+    return { success: !error, data, error };
+  } catch (e) {
+    console.error('🚨 Test error:', e);
+    return { success: false, error: e };
+  }
+};
+
+// Add this to window for easy testing
+if (typeof window !== 'undefined') {
+  (window as any).testBookingRPC = testBookingRPC;
+}

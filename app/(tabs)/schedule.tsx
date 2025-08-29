@@ -374,8 +374,13 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
                         Alert.alert('Please sign in to book');
                         return;
                       }
+                      
+                      console.log('🎯 Book button clicked for class:', c.id, c.title);
                       setBookingState((s) => ({ ...s, [c.id]: 'booking' }));
+                      
                       const res = await bookWithEligibility(uid, c.id);
+                      console.log('📋 Booking result:', res);
+                      
                       if (res.booked) {
                         setBookingState((s) => ({ ...s, [c.id]: 'booked' }));
                         const creditMsg = res.usedCredit ? (typeof res.remainingCredits === 'number' ? `\nCredits left: ${res.remainingCredits}` : '') : '';
@@ -387,9 +392,10 @@ const { items, isLoading, isError, refetch, add, update, remove, creating, updat
                         setBookingState((s) => ({ ...s, [c.id]: 'idle' }));
                         Alert.alert('Not booked', res.reason ?? 'Try again');
                       }
-                    } catch (e) {
+                    } catch (e: any) {
+                      console.error('🚨 Booking error in UI:', e);
                       setBookingState((s) => ({ ...s, [c.id]: 'idle' }));
-                      Alert.alert('Error', 'Could not book, please try again.');
+                      Alert.alert('Error', e?.message || 'Could not book, please try again.');
                     }
                   }}
                 >
